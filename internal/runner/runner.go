@@ -30,7 +30,7 @@ const defaultBuildTimeout = 60 * time.Second
 // StartRequest is the payload for POST /api/runs.
 type StartRequest struct {
 	ScenarioIDs  []string `json:"scenarioIds"`
-	Model        string   `json:"model"`
+	ModelID      string   `json:"modelId,omitempty"`
 	Endpoint     string   `json:"endpoint,omitempty"`
 	APIKey       string   `json:"apiKey,omitempty"`
 	SystemPrompt string   `json:"systemPrompt,omitempty"`
@@ -91,7 +91,7 @@ func (e *Engine) Start(req StartRequest) (string, error) {
 		Runtime:     "local",
 		RuntimeKind: "llama.cpp",
 		Endpoint:    req.Endpoint,
-		Model:       req.Model,
+		Model:       req.ModelID,
 		Harness:     req.Harness,
 	}
 	if run.Endpoint == "" {
@@ -108,7 +108,7 @@ func (e *Engine) Start(req StartRequest) (string, error) {
 
 	startPayload := map[string]any{
 		"scenarioIds": req.ScenarioIDs,
-		"model":       req.Model,
+		"model":       req.ModelID,
 		"endpoint":    run.Endpoint,
 		"harness":     req.Harness,
 	}
@@ -361,7 +361,7 @@ func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest
 		WorkDir:      workDir,
 		Prompt:       scenario.Prompt,
 		Endpoint:     endpoint,
-		Model:        req.Model,
+		Model:        req.ModelID,
 		APIKey:       req.APIKey,
 		SystemPrompt: req.SystemPrompt,
 		Harness:      req.Harness,
@@ -572,7 +572,7 @@ func (e *Engine) writeReport(runID string, req StartRequest, total, max int, res
 	timestamp := time.Now().UnixMilli()
 	path := filepath.Join(dir, fmt.Sprintf("%d-local.json", timestamp))
 
-	merged := model.ModelMetrics{Model: req.Model}
+	merged := model.ModelMetrics{Model: req.ModelID}
 	for _, r := range results {
 		merged.RequestCount += r.ModelMetrics.RequestCount
 		merged.PromptTokens += r.ModelMetrics.PromptTokens

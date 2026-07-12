@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -193,14 +194,14 @@ func (s *server) handleRuns(w http.ResponseWriter, r *http.Request) {
 		s.handleStopRun(w, r, runID)
 		return
 	}
-	// /api/runs/{id}/scenarios/{scenarioId}/events
-	if len(parts) == 5 && parts[2] == "scenarios" && parts[4] == "events" {
+	// /api/runs/{id}/events
+	if len(parts) == 3 && parts[2] == "events" {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet)
 			writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 			return
 		}
-		writeJSON(w, http.StatusOK, []map[string]any{})
+		s.handleRunEvents(w, r, runID)
 		return
 	}
 	// /api/runs/{id}
@@ -227,8 +228,8 @@ func (s *server) handleStartRun(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "scenarioIds is required"})
 		return
 	}
-	if req.Model == "" {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "model is required"})
+	if req.ModelID == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "modelId is required"})
 		return
 	}
 	runID, err := s.runner.Start(req)
@@ -297,6 +298,26 @@ func (s *server) handleRunStream(w http.ResponseWriter, r *http.Request, runID s
 			flusher.Flush()
 		}
 	}
+}
+
+func (s *server) handleRunEvents(w http.ResponseWriter, r *http.Request, runID string) {
+	fromSeq := int64(-1)
+	if raw := r.URL.Query().Get("fromSeq"); raw != "" {
+		v, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid fromSeq"})
+			return
+		}
+		fromSeq = v
+	}
+
+	events, err := s.store.ListEvents(runID, fromSeq)
+	if err != nil {
+		slog.Error("list run events", "run_id", runID, "err", err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to list events"})
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
 }
 
 func (s *server) handleOneshotTests(w http.ResponseWriter, r *http.Request) {
