@@ -1,0 +1,14 @@
+services:
+  scaffold-bench-go:
+    build: .
+    image: ${SCAFFOLD_IMAGE:-scaffold-bench-go:local}
+    container_name: scaffold-bench-go
+    ports:
+      - "${BENCH_HTTP_PORT:-8080}:8080"
+    volumes:
+      - "${BENCH_DATA_PATH:-./data}:/data"
+    environment:
+      BENCH_HTTP_ADDR: ":8080"
+      BENCH_DB_PATH: "/data/scaffold-bench.db"
+      BENCH_DATA_DIR: "/data"
+    restart: unless-stopped
