@@ -128,3 +128,73 @@ func TestEngineEndToEnd(t *testing.T) {
 		t.Fatalf("expected report path, got %s", run.ReportPath)
 	}
 }
+
+func TestMissingRequirement(t *testing.T) {
+	tests := []struct {
+		name     string
+		requires []string
+		want     string
+	}{
+		{"empty", nil, ""},
+		{"present tool", []string{"go"}, ""},
+		{"missing tool", []string{"sb-tool-that-should-not-exist"}, "sb-tool-that-should-not-exist"},
+		{"first missing", []string{"go", "sb-tool-that-should-not-exist"}, "sb-tool-that-should-not-exist"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := missingRequirement(tt.requires); got != tt.want {
+				t.Errorf("missingRequirement(%v) = %q, want %q", tt.requires, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunScenarioSkipsOnMissingRequirement(t *testing.T) {
+	dir := t.TempDir()
+	store, err := storage.Open(filepath.Join(dir, "runner.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	hub := realtime.NewHub()
+	cfg := config.Config{DataDir: dir}
+	registry := &Registry{
+		scenarios: map[string]Scenario{
+			"missing-tool": {
+				ID:         "missing-tool",
+				Category:   "test",
+				Family:     "test",
+				MaxPoints:  10,
+				RubricKind: "10pt",
+				Manifest: Manifest{
+					Requires: []string{"sb-tool-that-should-not-exist"},
+				},
+			},
+		},
+	}
+	engine := NewEngine(store, hub, cfg, registry)
+	scenario, _ := registry.Get("missing-tool")
+
+	res := engine.runScenario(context.Background(), "run-1", StartRequest{Model: "fake"}, scenario, "", 0, &activeRun{})
+
+	if res.Status != model.ScenarioSkipped {
+		t.Errorf("status = %q, want %q", res.Status, model.ScenarioSkipped)
+	}
+	if res.Points != 0 {
+		t.Errorf("points = %d, want 0", res.Points)
+	}
+	if res.MaxPoints != 0 {
+		t.Errorf("maxPoints = %d, want 0", res.MaxPoints)
+	}
+	if !strings.Contains(res.Error, "sb-tool-that-should-not-exist") {
+		t.Errorf("error = %q, want it to name missing tool", res.Error)
+	}
+	if !strings.Contains(res.Evaluation.Summary, "sb-tool-that-should-not-exist") {
+		t.Errorf("evaluation summary = %q, want it to name missing tool", res.Evaluation.Summary)
+	}
+}

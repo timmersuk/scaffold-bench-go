@@ -235,6 +235,19 @@ type scenarioResult struct {
 	Error        string
 }
 
+// missingRequirement returns the first manifest requirement that is not on PATH.
+func missingRequirement(requires []string) string {
+	for _, name := range requires {
+		if name == "" {
+			continue
+		}
+		if _, err := exec.LookPath(name); err != nil {
+			return name
+		}
+	}
+	return ""
+}
+
 func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest, scenario Scenario, endpoint string, timeout time.Duration, ar *activeRun) scenarioResult {
 	res := scenarioResult{ScenarioID: scenario.ID, Category: scenario.Category, Family: scenario.Family, MaxPoints: scenario.MaxPoints}
 	now := time.Now().UnixMilli()
@@ -258,6 +271,24 @@ func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest
 		MaxPoints:  scenario.MaxPoints,
 		RubricKind: scenario.RubricKind,
 	})
+
+	if missing := missingRequirement(scenario.Manifest.Requires); missing != "" {
+		msg := fmt.Sprintf("missing required tool: %s", missing)
+		res.Status = model.ScenarioSkipped
+		res.MaxPoints = 0
+		res.Error = msg
+		res.Evaluation = model.Evaluation{
+			Status:    "skipped",
+			Points:    0,
+			MaxPoints: 0,
+			Summary:   msg,
+			Checks: []model.CheckResult{
+				{Name: "requires", Pass: false, Weight: 0, Detail: msg},
+			},
+		}
+		e.finishScenario(runID, scenario, ar, res)
+		return res
+	}
 
 	workDir, err := os.MkdirTemp("", "sb-run-")
 	if err != nil {
@@ -411,35 +442,35 @@ func (e *Engine) finishScenario(runID string, scenario Scenario, ar *activeRun, 
 		mutated = len(res.Archive.Changed) > 0 || len(res.Archive.Deleted) > 0
 	}
 	e.store.UpsertScenarioRun(model.ScenarioRun{
-		RunID:               runID,
-		ScenarioID:          scenario.ID,
-		Category:            scenario.Category,
-		Family:              scenario.Family,
-		FinishedAt:          &ts,
-		Status:              res.Status,
-		Points:              &res.Points,
-		MaxPoints:           scenario.MaxPoints,
-		RubricKind:          scenario.RubricKind,
-		WallTimeMs:          &res.WallTimeMs,
-		FirstTokenMs:        res.FirstTokenMs,
-		ToolCallCount:       &res.ToolCalls,
-		ModelMetricsJSON:    string(modelMetricsJSON),
-		EvaluationJSON:      string(evaluationJSON),
-		Error:               res.Error,
-		ArtifactPath:        res.ArtifactPath,
-		Mutated:             &mutated,
+		RunID:            runID,
+		ScenarioID:       scenario.ID,
+		Category:         scenario.Category,
+		Family:           scenario.Family,
+		FinishedAt:       &ts,
+		Status:           res.Status,
+		Points:           &res.Points,
+		MaxPoints:        res.MaxPoints,
+		RubricKind:       scenario.RubricKind,
+		WallTimeMs:       &res.WallTimeMs,
+		FirstTokenMs:     res.FirstTokenMs,
+		ToolCallCount:    &res.ToolCalls,
+		ModelMetricsJSON: string(modelMetricsJSON),
+		EvaluationJSON:   string(evaluationJSON),
+		Error:            res.Error,
+		ArtifactPath:     res.ArtifactPath,
+		Mutated:          &mutated,
 	})
 
 	e.publish(runID, scenario.ID, ar.nextSeq(), ts, model.EventScenarioFinished, map[string]any{
-		"scenarioId":   scenario.ID,
-		"status":       string(res.Status),
-		"points":       res.Points,
-		"wallTimeMs":   res.WallTimeMs,
+		"scenarioId":    scenario.ID,
+		"status":        string(res.Status),
+		"points":        res.Points,
+		"wallTimeMs":    res.WallTimeMs,
 		"toolCallCount": res.ToolCalls,
-		"firstTokenMs": res.FirstTokenMs,
-		"evaluation":   res.Evaluation,
-		"modelMetrics": res.ModelMetrics,
-		"artifactPath": res.ArtifactPath,
+		"firstTokenMs":  res.FirstTokenMs,
+		"evaluation":    res.Evaluation,
+		"modelMetrics":  res.ModelMetrics,
+		"artifactPath":  res.ArtifactPath,
 	})
 }
 
@@ -507,30 +538,30 @@ func copyDir(src, dst string) error {
 }
 
 type runReport struct {
-	Timestamp string            `json:"timestamp"`
-	Runtime   string            `json:"runtime"`
-	TotalPoints int             `json:"totalPoints"`
-	MaxPoints int               `json:"maxPoints"`
-	Harness   string            `json:"harness,omitempty"`
+	Timestamp    string             `json:"timestamp"`
+	Runtime      string             `json:"runtime"`
+	TotalPoints  int                `json:"totalPoints"`
+	MaxPoints    int                `json:"maxPoints"`
+	Harness      string             `json:"harness,omitempty"`
 	ModelMetrics model.ModelMetrics `json:"modelMetrics"`
-	Results   []scenarioReport  `json:"results"`
+	Results      []scenarioReport   `json:"results"`
 }
 
 type scenarioReport struct {
-	ScenarioID       string            `json:"scenarioId"`
-	Category         string            `json:"category"`
-	Family           string            `json:"family,omitempty"`
-	Status           string            `json:"status"`
-	Points           int               `json:"points"`
-	MaxPoints        int               `json:"maxPoints"`
-	Summary          string            `json:"summary"`
-	RubricKind       string            `json:"rubricKind,omitempty"`
-	ToolCallCount    int               `json:"toolCallCount"`
-	WallTimeMs       int64             `json:"wallTimeMs"`
-	FirstTokenMs     *int64            `json:"firstTokenMs,omitempty"`
-	Error            string            `json:"error,omitempty"`
-	ModelMetrics     model.ModelMetrics `json:"modelMetrics"`
-	Checks           []model.CheckResult `json:"checks"`
+	ScenarioID    string              `json:"scenarioId"`
+	Category      string              `json:"category"`
+	Family        string              `json:"family,omitempty"`
+	Status        string              `json:"status"`
+	Points        int                 `json:"points"`
+	MaxPoints     int                 `json:"maxPoints"`
+	Summary       string              `json:"summary"`
+	RubricKind    string              `json:"rubricKind,omitempty"`
+	ToolCallCount int                 `json:"toolCallCount"`
+	WallTimeMs    int64               `json:"wallTimeMs"`
+	FirstTokenMs  *int64              `json:"firstTokenMs,omitempty"`
+	Error         string              `json:"error,omitempty"`
+	ModelMetrics  model.ModelMetrics  `json:"modelMetrics"`
+	Checks        []model.CheckResult `json:"checks"`
 }
 
 func (e *Engine) writeReport(runID string, req StartRequest, total, max int, results []scenarioResult) (string, error) {
