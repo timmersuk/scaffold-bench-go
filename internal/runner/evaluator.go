@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,8 +25,41 @@ func NewEvaluator() *Evaluator {
 	return &Evaluator{}
 }
 
+// canonicalizeWorkspaceText rewrites CRLF line endings to LF for all files under
+// root, skipping directories like node_modules that should not be scored.
+func canonicalizeWorkspaceText(root string) error {
+	if root == "" {
+		return nil
+	}
+	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case "node_modules", ".git", "vendor":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !bytes.Contains(data, []byte("\r\n")) {
+			return nil
+		}
+		return os.WriteFile(path, bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n")), 0o644)
+	})
+}
+
 // Evaluate runs all rubric checks in the manifest and returns the aggregate score.
 func (e *Evaluator) Evaluate(ctx context.Context, in Input) model.Evaluation {
+	// Normalize text-file line endings in the mutated workspace before scoring.
+	// Pristine copies are normalized on read in diff/comparison helpers so they
+	// compare apples-to-apples regardless of checkout platform.
+	_ = canonicalizeWorkspaceText(in.WorkDir)
+
 	ev := model.Evaluation{
 		Status:    "fail",
 		Points:    0,
@@ -138,12 +172,13 @@ func (e *Evaluator) runCheck(ctx context.Context, in Input, check Check) model.C
 		result.Pass, result.Detail = runTraceVerificationAfterChange(in, check.Params)
 	case "no_added_comments":
 		result.Pass, result.Detail = runNoAddedComments(in, check.Params)
+	case "ast_property_contains_call":
+		result.Pass, result.Detail = runPropertyContainsCall(in, check.Params)
+	case "ast_file_calls":
+		result.Pass, result.Detail = runFileCalls(in, check.Params)
+	case "ast_jsx_passes_prop":
+		result.Pass, result.Detail = runJsxPassesProp(in, check.Params)
 	default:
-		if strings.HasPrefix(check.Type, "ast_") {
-			result.Pass = true
-			result.Detail = fmt.Sprintf("AST check %q is stubbed as skipped", check.Type)
-			break
-		}
 		result.Detail = fmt.Sprintf("unsupported check type %q", check.Type)
 	}
 

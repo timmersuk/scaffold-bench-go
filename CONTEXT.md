@@ -34,5 +34,11 @@ The behavior defined by the original TypeScript scenario in `1337hero/scaffold-b
 A record that a field or fixture came from the original TypeScript scenario, kept for audit but not used by the Go evaluator.
 _Avoid_: Source of truth.
 
+**AST Check**:
+A rubric check whose `type` begins with `ast_`, implemented as a native Go check that analyzes TypeScript or TSX source files to match the behavior of the upstream TypeScript benchmark. AST checks do not shell out; they are ordinary evaluator checks.
+
+**Behavioral Source of Truth**:
+The behavior defined by the original TypeScript scenario in `1337hero/scaffold-bench`. When porting, the upstream fixtures and hidden tests are copied verbatim unless an explicit compatibility issue is declared.
+
 **Hidden Test**:
 A test fixture kept outside the model workspace and copied into a temporary directory only during evaluation so the model cannot read the assertions.
