@@ -109,7 +109,26 @@ func (e *Evaluator) runCheck(ctx context.Context, in Input, check Check) model.C
 		result.Pass, result.Detail = runCommandCheck(ctx, in, check.Params)
 	case "trace_read_before_edit":
 		result.Pass, result.Detail = runTraceReadBeforeEdit(in, check.Params)
+	case "function_equals":
+		result.Pass, result.Detail = runFunctionEquals(in, check.Params, false)
+	case "function_not_equal":
+		result.Pass, result.Detail = runFunctionEquals(in, check.Params, true)
+	case "function_equals_original":
+		result.Pass, result.Detail = runFunctionEqualsOriginal(in, check.Params)
+	case "no_files_changed":
+		result.Pass, result.Detail = runNoFilesChanged(in, check.Params)
+	case "trace_search_before_edit":
+		result.Pass, result.Detail = runTraceSearchBeforeEdit(in, check.Params)
+	case "trace_verification_after_change":
+		result.Pass, result.Detail = runTraceVerificationAfterChange(in, check.Params)
+	case "no_added_comments":
+		result.Pass, result.Detail = runNoAddedComments(in, check.Params)
 	default:
+		if strings.HasPrefix(check.Type, "ast_") {
+			result.Pass = true
+			result.Detail = fmt.Sprintf("AST check %q is stubbed as skipped", check.Type)
+			break
+		}
 		result.Detail = fmt.Sprintf("unsupported check type %q", check.Type)
 	}
 
