@@ -1,14 +1,19 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"text/template"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +23,9 @@ import (
 	"github.com/timmersuk/scaffold-bench-go/internal/realtime"
 	"github.com/timmersuk/scaffold-bench-go/internal/storage"
 )
+
+// defaultBuildTimeout is the maximum duration allowed for a single build command.
+const defaultBuildTimeout = 60 * time.Second
 
 // StartRequest is the payload for POST /api/runs.
 type StartRequest struct {
@@ -294,6 +302,30 @@ func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest
 		}
 	}
 
+	// Stage hidden fixtures in a directory adjacent to the workspace root.
+	hiddenDir := ""
+	if len(scenario.Manifest.HiddenFixtures) > 0 {
+		hiddenDir = filepath.Join(workDir, "hidden")
+		if err := os.MkdirAll(hiddenDir, 0o755); err != nil {
+			res.Status = model.ScenarioFail
+			res.Error = fmt.Sprintf("create hidden dir: %s", err)
+			res.Evaluation = errorEvaluation(res.Error, scenario.MaxPoints)
+			e.finishScenario(runID, scenario, ar, res)
+			return res
+		}
+		for _, hf := range scenario.Manifest.HiddenFixtures {
+			src := filepath.Join(scenario.Dir, hf.Src)
+			dst := filepath.Join(hiddenDir, hf.Dest)
+			if err := copyFile(src, dst); err != nil {
+				res.Status = model.ScenarioFail
+				res.Error = fmt.Sprintf("copy hidden fixture %s: %s", hf.Src, err)
+				res.Evaluation = errorEvaluation(res.Error, scenario.MaxPoints)
+				e.finishScenario(runID, scenario, ar, res)
+				return res
+			}
+		}
+	}
+
 	agentCfg := agent.Config{
 		WorkDir:      workDir,
 		Prompt:       scenario.Prompt,
@@ -309,6 +341,15 @@ func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest
 	}
 	output := agent.Run(ctx, agentCfg)
 
+	// Run manifest build commands after the agent finishes and before checks.
+	if err := runBuildCommands(ctx, workDir, scenario.Manifest.Build, defaultBuildTimeout); err != nil {
+		res.Status = model.ScenarioFail
+		res.Error = err.Error()
+		res.Evaluation = errorEvaluation(res.Error, scenario.MaxPoints)
+		e.finishScenario(runID, scenario, ar, res)
+		return res
+	}
+
 	pristineDir := scenario.PristineDir
 	if pristineDir == "" {
 		empty, _ := os.MkdirTemp("", "sb-pristine-")
@@ -322,6 +363,7 @@ func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest
 		WorkDir:     workDir,
 		PristineDir: pristineDir,
 		Dir:         scenario.Dir,
+		HiddenDir:   hiddenDir,
 		ToolCalls:   output.ToolCalls,
 	})
 	res.Evaluation = eval
@@ -545,4 +587,91 @@ func (e *Engine) writeReport(runID string, req StartRequest, total, max int, res
 	}
 	rel, _ := filepath.Rel(e.cfg.DataDir, path)
 	return rel, nil
+}
+
+// runBuildCommands executes the manifest build commands in order. Each command
+// runs with the current process environment plus any variables declared in the
+// manifest. The {{.WorkDir}} template variable is expanded to an absolute path.
+func runBuildCommands(ctx context.Context, workDir string, build *Build, timeout time.Duration) error {
+	if build == nil || len(build.Commands) == 0 {
+		return nil
+	}
+
+	env := os.Environ()
+	for k, v := range build.Env {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	for _, command := range build.Commands {
+		expanded, err := expandBuildCommand(command, workDir)
+		if err != nil {
+			return err
+		}
+
+		ok, output, err := executeCommand(ctx, workDir, expanded, env, timeout)
+		if err != nil || !ok {
+			if err == nil {
+				err = fmt.Errorf("command exited non-zero")
+			}
+			return fmt.Errorf("build command %q failed: %w\n%s", expanded, err, output)
+		}
+	}
+	return nil
+}
+
+func expandBuildCommand(command, workDir string) (string, error) {
+	tmpl, err := template.New("build").Parse(command)
+	if err != nil {
+		return "", fmt.Errorf("parse build command template: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, struct{ WorkDir string }{WorkDir: workDir}); err != nil {
+		return "", fmt.Errorf("execute build command template: %w", err)
+	}
+	return buf.String(), nil
+}
+
+func executeCommand(ctx context.Context, cwd, command string, env []string, timeout time.Duration) (bool, string, error) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	shell, arg := getShell()
+	cmd := exec.CommandContext(ctx, shell, arg, command)
+	cmd.Dir = cwd
+	cmd.Env = env
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	out := strings.TrimSpace(stdout.String())
+	if out == "" {
+		out = strings.TrimSpace(stderr.String())
+	}
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return false, out, fmt.Errorf("timed out after %s", timeout)
+		}
+		return false, out, err
+	}
+	return true, out, nil
+}
+
+func getShell() (string, string) {
+	if runtime.GOOS == "windows" {
+		shell := os.Getenv("COMSPEC")
+		if shell == "" {
+			shell = "cmd.exe"
+		}
+		return shell, "/c"
+	}
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+	return shell, "-lc"
 }

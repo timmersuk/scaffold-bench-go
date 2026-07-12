@@ -1,10 +1,13 @@
 package runner
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +17,52 @@ import (
 	"github.com/timmersuk/scaffold-bench-go/internal/realtime"
 	"github.com/timmersuk/scaffold-bench-go/internal/storage"
 )
+
+func TestRunBuildCommands(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Write a small helper script so that path quoting is handled by argument
+	// passing rather than shell escaping.
+	var command string
+	if runtime.GOOS == "windows" {
+		script := filepath.Join(tmp, "build.bat")
+		if err := os.WriteFile(script, []byte("@echo off\ntype nul > %1\\marker.txt\n"), 0o644); err != nil {
+			t.Fatalf("write build.bat: %v", err)
+		}
+		command = script + ` {{.WorkDir}}`
+	} else {
+		script := filepath.Join(tmp, "build.sh")
+		if err := os.WriteFile(script, []byte("#!/bin/sh\ntouch \"$1/marker.txt\"\n"), 0o755); err != nil {
+			t.Fatalf("write build.sh: %v", err)
+		}
+		command = `sh ` + script + ` {{.WorkDir}}`
+	}
+
+	build := &Build{
+		Commands: []string{command},
+		Env:      map[string]string{"SB_BUILD_TEST": "1"},
+	}
+
+	if err := runBuildCommands(context.Background(), tmp, build, defaultBuildTimeout); err != nil {
+		t.Fatalf("runBuildCommands: %v", err)
+	}
+
+	marker := filepath.Join(tmp, "marker.txt")
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("marker file not created: %v", err)
+	}
+}
+
+func TestRunBuildCommandsFailsOnError(t *testing.T) {
+	build := &Build{Commands: []string{"exit 7"}}
+	err := runBuildCommands(context.Background(), t.TempDir(), build, defaultBuildTimeout)
+	if err == nil {
+		t.Fatal("expected build command failure")
+	}
+	if !strings.Contains(err.Error(), "exit status 7") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
 
 func TestEngineEndToEnd(t *testing.T) {
 	calls := 0

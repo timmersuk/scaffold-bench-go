@@ -147,7 +147,8 @@ type Input struct {
 	Manifest    Manifest
 	WorkDir     string
 	PristineDir string
-	Dir         string // scenario directory, used to resolve hidden fixtures
+	Dir         string // scenario directory, used to resolve relative paths
+	HiddenDir   string // directory where hidden fixtures are staged; empty if none
 	ToolCalls   []model.ToolCall
 }
 

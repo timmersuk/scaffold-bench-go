@@ -165,3 +165,42 @@ func TestEvaluatorBehavioralTest(t *testing.T) {
 		t.Fatalf("expected 6 points, got %d: %+v; output: %s", res.Points, res.Checks, res.Summary)
 	}
 }
+
+func TestEvaluatorBehavioralTestHiddenFixture(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "playground")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("mkdir playground: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "utils.js"), []byte("function hello() { return 'hi'; }"), 0o644); err != nil {
+		t.Fatalf("write utils.js: %v", err)
+	}
+
+	hiddenDir := filepath.Join(tmp, "hidden")
+	if err := os.MkdirAll(filepath.Join(hiddenDir, "playground"), 0o755); err != nil {
+		t.Fatalf("mkdir hidden fixture dir: %v", err)
+	}
+	script := "exit 0"
+	if err := os.WriteFile(filepath.Join(hiddenDir, "playground", "utils.behavior.test.mjs"), []byte(script), 0o644); err != nil {
+		t.Fatalf("write hidden fixture: %v", err)
+	}
+
+	m := makeManifest(Rubric{
+		Correctness: []Check{
+			{Name: "behavior", Type: "behavioral_test", Weight: 6, Params: map[string]any{
+				"runner":   "shell",
+				"testFile": "playground/utils.behavior.test.mjs",
+				"files":    []any{"playground/utils.js"},
+			}},
+		},
+	})
+	m.HiddenFixtures = []FileMapping{
+		{Src: "_fixtures/behaviors/SB-01/throttle.behavior.test.mjs", Dest: "playground/utils.behavior.test.mjs"},
+	}
+
+	ev := NewEvaluator()
+	res := ev.Evaluate(context.Background(), Input{Manifest: m, WorkDir: tmp, HiddenDir: hiddenDir})
+	if res.Points != 6 {
+		t.Fatalf("expected 6 points, got %d: %+v", res.Points, res.Checks)
+	}
+}
