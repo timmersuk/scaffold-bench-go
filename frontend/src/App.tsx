@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { LayoutDashboard, History, FlaskConical } from "lucide-react";
+import { Dashboard } from "./views/Dashboard";
+import { StartRunModal } from "./components/StartRunModal";
+import { ToastProvider } from "./components/Toaster";
 
 type View = { name: "dashboard" } | { name: "history" } | { name: "oneshot" };
 
@@ -18,6 +21,7 @@ function setView(view: View) {
 
 export default function App() {
   const [view, setViewState] = useState<View>(parseView);
+  const [isRunModalOpen, setIsRunModalOpen] = useState(false);
 
   useEffect(() => {
     const onPop = () => setViewState(parseView());
@@ -36,30 +40,44 @@ export default function App() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <header className="border-b bg-white px-6 py-4">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <h1 className="text-xl font-semibold tracking-tight">Scaffold Bench</h1>
-          <nav className="flex gap-2">
-            <NavButton {...link({ name: "dashboard" })} icon={<LayoutDashboard size={18} />}>
-              Dashboard
-            </NavButton>
-            <NavButton {...link({ name: "history" })} icon={<History size={18} />}>
-              History
-            </NavButton>
-            <NavButton {...link({ name: "oneshot" })} icon={<FlaskConical size={18} />}>
-              One-shot
-            </NavButton>
-          </nav>
-        </div>
-      </header>
+    <ToastProvider>
+      <div className="min-h-screen bg-gray-50 text-gray-900">
+        <header className="border-b bg-white px-6 py-4">
+          <div className="mx-auto flex max-w-7xl items-center justify-between">
+            <h1 className="text-xl font-semibold tracking-tight">Scaffold Bench</h1>
+            <nav className="flex gap-2">
+              <NavButton {...link({ name: "dashboard" })} icon={<LayoutDashboard size={18} />}>
+                Dashboard
+              </NavButton>
+              <NavButton {...link({ name: "history" })} icon={<History size={18} />}>
+                History
+              </NavButton>
+              <NavButton {...link({ name: "oneshot" })} icon={<FlaskConical size={18} />}>
+                One-shot
+              </NavButton>
+            </nav>
+          </div>
+        </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-6">
-        {view.name === "dashboard" && <Dashboard />}
-        {view.name === "history" && <RunHistory />}
-        {view.name === "oneshot" && <OneShotLab />}
-      </main>
-    </div>
+        <main className="mx-auto max-w-7xl px-6 py-6">
+          {view.name === "dashboard" && (
+            <Dashboard
+              onStartRun={() => setIsRunModalOpen(true)}
+              onHistory={() => navigate({ name: "history" })}
+            />
+          )}
+          {view.name === "history" && <RunHistory onBack={() => navigate({ name: "dashboard" })} />}
+          {view.name === "oneshot" && <OneShotLab onBack={() => navigate({ name: "dashboard" })} />}
+        </main>
+      </div>
+
+      {isRunModalOpen && (
+        <StartRunModal
+          onClose={() => setIsRunModalOpen(false)}
+          onLaunch={() => setIsRunModalOpen(false)}
+        />
+      )}
+    </ToastProvider>
   );
 }
 
@@ -87,33 +105,32 @@ function NavButton({
   );
 }
 
-function Dashboard() {
+function RunHistory({ onBack }: { onBack: () => void }) {
   return (
     <div className="space-y-6">
       <div className="rounded-xl border bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold">Dashboard</h2>
-        <p className="mt-2 text-gray-600">Start a benchmark run and watch live progress here.</p>
-      </div>
-    </div>
-  );
-}
-
-function RunHistory() {
-  return (
-    <div className="space-y-6">
-      <div className="rounded-xl border bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold">Run History</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Run History</h2>
+          <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+            Back to Dashboard
+          </button>
+        </div>
         <p className="mt-2 text-gray-600">Leaderboard and past runs will appear here.</p>
       </div>
     </div>
   );
 }
 
-function OneShotLab() {
+function OneShotLab({ onBack }: { onBack: () => void }) {
   return (
     <div className="space-y-6">
       <div className="rounded-xl border bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold">One-shot Lab</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">One-shot Lab</h2>
+          <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+            Back to Dashboard
+          </button>
+        </div>
         <p className="mt-2 text-gray-600">Single-prompt model tests will appear here.</p>
       </div>
     </div>

@@ -98,7 +98,7 @@ func TestEngineEndToEnd(t *testing.T) {
 
 	runID, err := engine.Start(StartRequest{
 		ScenarioIDs: []string{"demo"},
-		Model:       "fake",
+		ModelID:     "fake",
 		Endpoint:    modelServer.URL,
 		TimeoutMs:   30000,
 	})
@@ -180,7 +180,7 @@ func TestRunScenarioSkipsOnMissingRequirement(t *testing.T) {
 	engine := NewEngine(store, hub, cfg, registry)
 	scenario, _ := registry.Get("missing-tool")
 
-	res := engine.runScenario(context.Background(), "run-1", StartRequest{Model: "fake"}, scenario, "", 0, &activeRun{})
+	res := engine.runScenario(context.Background(), "run-1", StartRequest{ModelID: "fake"}, scenario, "", 0, &activeRun{})
 
 	if res.Status != model.ScenarioSkipped {
 		t.Errorf("status = %q, want %q", res.Status, model.ScenarioSkipped)

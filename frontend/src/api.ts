@@ -1,4 +1,5 @@
 import type {
+  BackendEvent,
   ModelsResponse,
   OneshotLatestRun,
   OneshotTestSummary,
@@ -39,10 +40,16 @@ export const api = {
   getModels: (signal?: AbortSignal) => get<ModelsResponse>("/models", signal),
   listRuns: (signal?: AbortSignal) => get<RunSummary[]>("/runs", signal),
   activeRun: (signal?: AbortSignal) => get<{ runId: string | null }>("/runs/active", signal),
-  createRun: (body: { scenarioIds: string[]; modelId?: string }) =>
-    post<{ runId: string }>("/runs", body),
+  createRun: (body: {
+    scenarioIds: string[];
+    modelId?: string;
+    systemPrompt?: string;
+    timeoutMs?: number;
+  }) => post<{ runId: string }>("/runs", body),
   stopRun: (id: string) => post<{ ok: boolean }>(`/runs/${id}/stop`),
   clearRuns: () => post<{ ok: boolean }>("/runs/clear"),
+  getRunEvents: (runId: string, fromSeq = -1, signal?: AbortSignal) =>
+    get<BackendEvent[]>(`/runs/${runId}/events?fromSeq=${fromSeq}`, signal),
   getReportData: (signal?: AbortSignal) => get<ReportData>("/report/data", signal),
   oneshotTests: (signal?: AbortSignal) => get<OneshotTestSummary[]>("/oneshot/tests", signal),
   startOneshot: (body: { modelId: string; promptIds: string[] }) =>

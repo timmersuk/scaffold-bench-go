@@ -1,0 +1,5 @@
+# Dashboard event replay for server-sent run streams
+
+The Dashboard UI must be able to display a Run Stream, but a browser page reload or a dropped SSE connection can happen while a Run is still active. The upstream TypeScript project relied on the backend replaying the entire event stream from sequence 0 (`/api/runs/{id}/stream?fromSeq=0`). The Go backend already persists every Run Event to SQLite via `storage.InsertEvent`, but it did not expose those events to clients.
+
+We decided to expose persisted events through a new `GET /api/runs/{id}/events?fromSeq={seq}` endpoint and to support the same `?fromSeq=` parameter on the live SSE stream at `/api/runs/{id}/stream`. The frontend will fetch missed events before opening (or re-opening) the stream, then continue with live events. This mirrors the upstream behavior while keeping the Go evaluator as the single source of event truth, and it avoids requiring the browser to keep an unbroken SSE connection for the full duration of a Run.

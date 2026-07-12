@@ -44,5 +44,25 @@ The behavior defined by the original TypeScript scenario in `1337hero/scaffold-b
 A test fixture kept outside the model workspace and copied into a temporary directory only during evaluation so the model cannot read the assertions.
 
 **Model**:
-A selectable Large Language Model available through an inference endpoint. In the API it is represented by an `id`, `source` (`local` or `remote`), `endpoint`, and an optional `requiresApiKey` flag.
+A selectable Large Language Model available through an inference endpoint. In the API it is represented by an `id`, `source` (`local` | `remote`), `endpoint`, and an optional `requiresApiKey` flag.
 _Avoid_: LLM, inference target.
+
+## Benchmark Run
+
+**Run**:
+A single benchmark execution against one or more selected scenarios using one Model.
+
+**Active Run**:
+A Run that the server is currently executing. Only one Active Run is tracked at a time; it is discoverable via `/api/runs/active`.
+
+**Run Stream**:
+The server-sent event feed that emits a Run's events in real time, available at `/api/runs/{id}/stream`.
+
+**Run Event**:
+A persisted, sequenced message emitted by the runner during a Run. Examples include `run_started`, `scenario_started`, `assistant_delta`, and `scenario_finished`.
+
+**Scenario Result**:
+The outcome of an individual Scenario within a Run, including its status (`pass`, `partial`, `fail`, `stopped`, `skipped`), points, and evaluation details.
+
+**Dashboard**:
+The primary frontend view for selecting scenarios, configuring a Model, starting a Run, and watching the Run Stream.

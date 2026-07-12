@@ -188,6 +188,45 @@ func (s *Store) InsertEvent(runID, scenarioID string, seq, ts int64, typ string,
 	return nil
 }
 
+// ListEvents returns persisted events for a run with sequence greater than fromSeq.
+// When fromSeq is -1 all events are returned.
+func (s *Store) ListEvents(runID string, fromSeq int64) ([]model.Event, error) {
+	rows, err := s.db.Query(`
+		SELECT seq, ts, type, payload_json, run_id, scenario_id
+		FROM run_events
+		WHERE run_id = ? AND seq > ?
+		ORDER BY seq ASC
+	`, runID, fromSeq)
+	if err != nil {
+		return nil, fmt.Errorf("query events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []model.Event
+	for rows.Next() {
+		var e model.Event
+		var payloadJSON string
+		var scenarioID sql.NullString
+		if err := rows.Scan(&e.Seq, &e.Ts, &e.Type, &payloadJSON, &e.RunID, &scenarioID); err != nil {
+			return nil, fmt.Errorf("scan event: %w", err)
+		}
+		if scenarioID.Valid {
+			e.ScenarioID = scenarioID.String
+		}
+		if err := json.Unmarshal([]byte(payloadJSON), &e.Payload); err != nil {
+			return nil, fmt.Errorf("unmarshal event payload: %w", err)
+		}
+		if e.Payload == nil {
+			e.Payload = map[string]any{}
+		}
+		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate events: %w", err)
+	}
+	return events, nil
+}
+
 func nullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
 }

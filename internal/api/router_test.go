@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/timmersuk/scaffold-bench-go/internal/config"
+	"github.com/timmersuk/scaffold-bench-go/internal/model"
 	"github.com/timmersuk/scaffold-bench-go/internal/realtime"
 	"github.com/timmersuk/scaffold-bench-go/internal/runner"
 	"github.com/timmersuk/scaffold-bench-go/internal/storage"
@@ -63,7 +64,7 @@ func TestStartRunEndpoint(t *testing.T) {
 		t.Fatalf("new router: %v", err)
 	}
 
-	body := strings.NewReader(`{"scenarioIds":["demo"],"model":"test"}`)
+	body := strings.NewReader(`{"scenarioIds":["demo"],"modelId":"test"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/runs", body)
 	req.Header.Set("content-type", "application/json")
 	rr := httptest.NewRecorder()
@@ -231,6 +232,66 @@ func TestModelsEndpointDiscoversLocalAndRemote(t *testing.T) {
 	}
 	if !resp.Remote[1].RequiresAPIKey {
 		t.Errorf("second remote model should require API key")
+	}
+}
+
+func TestRunEventsEndpointReturnsPersistedEvents(t *testing.T) {
+	store, events, registry, fr := testDependencies(t)
+	router, err := NewRouter(Config{
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{LocalEndpoint: "http://127.0.0.1:1"},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	run := model.Run{
+		ID:          "run-events",
+		StartedAt:   1,
+		Status:      model.RunRunning,
+		ScenarioIDs: []string{"demo"},
+		Runtime:     "local",
+		RuntimeKind: "llama.cpp",
+		Model:       "test-model",
+	}
+	if err := store.InsertRun(run); err != nil {
+		t.Fatalf("insert run: %v", err)
+	}
+	if err := store.InsertEvent("run-events", "demo", 0, 1, model.EventScenarioStarted, map[string]any{"scenarioId": "demo"}); err != nil {
+		t.Fatalf("insert event: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/runs/run-events/events", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp []map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(resp))
+	}
+	if resp[0]["type"] != model.EventScenarioStarted {
+		t.Errorf("event type = %q, want %q", resp[0]["type"], model.EventScenarioStarted)
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/api/runs/run-events/events?fromSeq=0", nil)
+	rr2 := httptest.NewRecorder()
+	router.ServeHTTP(rr2, req2)
+	var filtered []map[string]any
+	if err := json.Unmarshal(rr2.Body.Bytes(), &filtered); err != nil {
+		t.Fatalf("decode fromSeq response: %v", err)
+	}
+	if len(filtered) != 0 {
+		t.Errorf("expected 0 events with fromSeq=0, got %d", len(filtered))
 	}
 }
 
