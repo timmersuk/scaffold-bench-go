@@ -1,0 +1,34 @@
+id: demo
+name: create-hello
+category: basic
+family: regex-style
+difficulty: low
+rubricKind: 10pt
+signalType: stdout
+track: execution
+prompt: |
+  Create a file at playground/hello.txt containing exactly the text "hello" (lowercase, no extra whitespace). Then finish.
+
+workspace:
+  root: playground
+
+rubric:
+  correctness:
+    - name: file contains hello
+      type: file_contains
+      weight: 8
+      params:
+        file: playground/hello.txt
+        pattern: "^hello$"
+  scope:
+    - name: only hello.txt changed
+      type: files_changed_only
+      weight: 2
+      params:
+        allowed:
+          - playground/hello.txt
+
+labels:
+  pass: Created playground/hello.txt containing exactly 'hello'.
+  partial: Created the file, but with incorrect content or extra changes.
+  fail: Did not create playground/hello.txt with 'hello'.
