@@ -3,8 +3,10 @@
 FROM debian:bookworm-slim
 
 # Make the buildx platform args available in this stage.
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+# Do not provide defaults here; defaults cause buildx to leave the
+# values at their default instead of injecting the per-platform values.
+ARG TARGETOS
+ARG TARGETARCH
 
 RUN groupadd --system --gid 10001 scaffold && \
     useradd --system --uid 10001 --gid scaffold --home-dir /data --shell /sbin/nologin scaffold
