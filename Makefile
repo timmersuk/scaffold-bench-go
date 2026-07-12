@@ -27,12 +27,12 @@ frontend-docker:
 # 2️⃣ Build the Go binaries using a golang container.
 # ------------------------------------------------------------------
 build-go-docker:
-	@echo "Building Go binaries for all supported architectures in Docker…"
+	@echo "Building linux/amd64 and linux/arm64 Go binaries in a Docker container…"
 	docker run --rm \
 	            -v "$(CURDIR):/src" \
 	            -w /src \
 	            golang:1.26-bookworm \
-	            sh -c 'make build-go-local'
+	            sh -c 'make build-go-local OSES=linux'
 
 # ------------------------------------------------------------------
 # 3️⃣ Public build targets that run the frontend and Go builds in Docker containers, or locally.
