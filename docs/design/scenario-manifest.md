@@ -184,7 +184,7 @@ Manifest:
 | `trace_verification_after_change` | A verification command passed after the first mutating change |
 | `no_added_comments` | Compare comments with pristine copy |
 | `no_extra_functions` | Count top-level function declarations vs pristine |
-| `ast_*` | Delegate to an AST plugin (initially stubbed; TS scenarios that need it will use a plugin) |
+| `ast_*` | Native Go checks that inspect TypeScript/TSX source for the specific patterns used by a scenario |
 
 Test runners for `behavioral_test`: `bun-test`, `go-test`, `cargo-test`, `pytest`, `php`, `shellcheck`, or a literal command template.
 
@@ -314,12 +314,12 @@ type Engine interface {
 3. Translate the representative subset to manifests and run them against golden workspaces to verify scores match.
 4. Port the remaining scenarios in batches:
    - Regex/scope/behavioral scenarios are mostly declarative.
-   - AST-dependent scenarios get an `ast_*` check type backed by a plugin; the first plugin can shell out to a small TypeScript fact-extractor to preserve exact semantics.
+   - AST-dependent scenarios get an `ast_*` check type implemented as a narrow native Go check. The check is validated against the upstream golden fixtures for that scenario, not against every possible TS edge case.
    - Highly custom scenarios keep a tiny Go `Evaluator` plugin registered by scenario ID.
 5. Keep external test runners (`bun test`, `go test`, etc.) as subprocess invocations; only the orchestration and scoring move to Go.
 
 ## Risks
 
-- **AST fidelity**: `evaluators/ast.ts` uses the TypeScript compiler API. The neutral manifest can express *what* to check, but a Go implementation must either embed a TS parser or accept a plugin boundary.
+- **AST fidelity**: `evaluators/ast.ts` uses the TypeScript compiler API. The neutral manifest can express *what* to check; native Go checks target the exact shapes used by ported scenarios and are validated against upstream gate fixtures.
 - **Tool-trace fidelity**: Some checks depend on the exact output strings of `read`/`edit`/`write`/`ls`/`bash`. The Go tool handlers must preserve these strings.
 - **Hidden tests**: Behavioral tests must remain outside the model workspace. The manifest `hiddenFixtures` plus a temp-copy runner handles this.

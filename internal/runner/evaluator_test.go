@@ -459,16 +459,4 @@ func TestEvaluatorNoAddedCommentsFails(t *testing.T) {
 	}
 }
 
-func TestEvaluatorAstStubSkipped(t *testing.T) {
-	m := makeManifest(Rubric{
-		Correctness: []Check{
-			{Name: "ast stub", Type: "ast_call_count", Weight: 3, Params: map[string]any{}},
-		},
-	})
 
-	ev := NewEvaluator()
-	res := ev.Evaluate(context.Background(), Input{Manifest: m, WorkDir: t.TempDir()})
-	if res.Points != 3 {
-		t.Fatalf("expected 3 points for skipped ast check, got %d: %v", res.Points, res.Checks)
-	}
-}

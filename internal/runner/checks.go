@@ -73,8 +73,8 @@ func runFunctionEqualsOriginal(in Input, params map[string]any) (bool, string) {
 		return false, fmt.Sprintf("could not read pristine %s: %v", file, err)
 	}
 
-	currentFn := extractFunction(string(current), functionName)
-	originalFn := extractFunction(string(original), functionName)
+	currentFn := extractFunction(normalizeCRLF(string(current)), functionName)
+	originalFn := extractFunction(normalizeCRLF(string(original)), functionName)
 	if currentFn == "" || originalFn == "" {
 		return false, fmt.Sprintf("could not extract %s from %s or its pristine copy", functionName, file)
 	}
@@ -177,8 +177,8 @@ func runNoAddedComments(in Input, params map[string]any) (bool, string) {
 		return false, fmt.Sprintf("could not read pristine %s: %v", file, err)
 	}
 
-	currentComments := extractComments(string(current))
-	originalComments := extractComments(string(original))
+	currentComments := extractComments(normalizeCRLF(string(current)))
+	originalComments := extractComments(normalizeCRLF(string(original)))
 	if len(currentComments) != len(originalComments) {
 		return false, fmt.Sprintf("comment count changed: %d -> %d", len(originalComments), len(currentComments))
 	}
@@ -301,3 +301,9 @@ var (
 	verifyGenericPattern = regexp.MustCompile(`\b(?:test|spec)s?\b`)
 	verifyInspectionLead = regexp.MustCompile(`^\s*(?:sudo\s+)?(?:cat|bat|less|more|head|tail|ls|ll|tree|grep|rg|ag|find|fd|sed|awk|gawk|rm|cp|mv|touch|mkdir|echo|printf|stat|file|wc|du|nano|vim|nvim|git|diff|chmod|chown|cd|export|open|xdg-open)\b`)
 )
+
+// normalizeCRLF converts Windows line endings to Unix so checks that compare
+// file contents are not sensitive to checkout platform.
+func normalizeCRLF(s string) string {
+	return strings.ReplaceAll(s, "\r\n", "\n")
+}

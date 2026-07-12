@@ -14,8 +14,8 @@ A single-binary Go + Vite port of [scaffold-bench](https://github.com/1337hero/s
 | Domain model & REST API | ✅ Designed | Core entities and `/api/*` routes defined in ADRs / issues |
 | SQLite schema & persistence | ✅ Done | Migrations, runs/scenario_runs/events tables, WAL |
 | Scenario manifest schema | ✅ Done | `docs/design/scenario-manifest.md`, YAML/JSON loader, Go evaluator interface |
-| Run engine & evaluator | 🚧 Partial | Engine runs scenarios end-to-end, evaluator supports core checks; gap: AST plugin, `requires` enforcement, trace semantics (#24, #25) |
-| Scenarios ported | 🚧 In progress | SB-01 port + validation in PR #26; remaining 49 scenarios not started |
+| Run engine & evaluator | 🚧 Partial | Core checks complete; `requires` enforcement and trace-semantic fixes landed (#24, #25). Native Go AST checks implemented for SB-25 (#14, ADR-0002). Remaining gaps: parallel tool execution (#17), preflight metadata (#18). |
+| Scenarios ported | 🚧 In progress | SB-01 and SB-25 ported and validated against golden workspaces; remaining 48 scenarios not started |
 | Frontend wiring | ❌ Not started | API exists (`/api/scenarios`, `/api/runs`, SSE stream), but `App.tsx` is still placeholder views |
 | One-shot lab | ❌ Not started | API stubs only (`/api/oneshot/*` return empty) |
 | Reports / leaderboard | ❌ Not started | `/api/report/data` returns empty skeleton |
@@ -38,16 +38,17 @@ All closed design issues from the wayfinder map:
 
 ### Run engine & evaluator
 
-- [ ] [#14 Add an AST plugin boundary for ast_* rubric checks](https://github.com/timmersuk/scaffold-bench-go/issues/14)
+- [x] [#14 Add an AST plugin boundary for ast_* rubric checks](https://github.com/timmersuk/scaffold-bench-go/issues/14) — implemented as native Go checks for SB-25 (ADR-0002)
 - [ ] [#17 Support parallel tool execution and tool-call hooks](https://github.com/timmersuk/scaffold-bench-go/issues/17)
 - [ ] [#18 Add run metadata and preflight checks](https://github.com/timmersuk/scaffold-bench-go/issues/18)
-- [ ] [#24 Fix trace_read_before_edit to require an edit/write](https://github.com/timmersuk/scaffold-bench-go/issues/24) — covered by PR #26
-- [ ] [#25 Runner engine does not enforce manifest requires list](https://github.com/timmersuk/scaffold-bench-go/issues/25)
+- [x] [#24 Fix trace_read_before_edit to require an edit/write](https://github.com/timmersuk/scaffold-bench-go/issues/24)
+- [x] [#25 Runner engine does not enforce manifest requires list](https://github.com/timmersuk/scaffold-bench-go/issues/25)
 
 ### Scenarios
 
-- [ ] [#16 Port the first real scenario (SB-01) and validate its score](https://github.com/timmersuk/scaffold-bench-go/issues/16) — PR #26
-- [ ] Port SB-02 through SB-50 (not yet ticketed in detail)
+- [x] [#16 Port the first real scenario (SB-01) and validate its score](https://github.com/timmersuk/scaffold-bench-go/issues/16)
+- [x] Port SB-25 and validate native AST checks against upstream gate fixtures
+- [ ] Port SB-02 through SB-24, SB-26 through SB-50 (not yet ticketed in detail)
 
 ### API / models
 

@@ -81,7 +81,7 @@ func walkFiles(root string) (map[string]string, error) {
 		if !isValidUTF8(data) {
 			return nil
 		}
-		files[rel] = string(data)
+		files[rel] = strings.ReplaceAll(string(data), "\r\n", "\n")
 		return nil
 	})
 	return files, err
