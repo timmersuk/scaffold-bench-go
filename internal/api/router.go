@@ -113,6 +113,10 @@ func (s *server) handleScenarios(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue
 		}
+		track := sc.Manifest.Meta.Track
+		if track == "" {
+			track = "execution"
+		}
 		infos = append(infos, scenarioInfo{
 			ID:         sc.ID,
 			Name:       sc.Name,
@@ -120,6 +124,7 @@ func (s *server) handleScenarios(w http.ResponseWriter, r *http.Request) {
 			Difficulty: sc.Manifest.Meta.Difficulty,
 			MaxPoints:  sc.MaxPoints,
 			Prompt:     sc.Prompt,
+			Track:      track,
 		})
 	}
 	writeJSON(w, http.StatusOK, infos)
@@ -130,9 +135,10 @@ func (s *server) handleModels(w http.ResponseWriter, r *http.Request) {
 	remote := make([]modelInfo, 0, len(s.appConfig.RemoteModels))
 	for _, id := range s.appConfig.RemoteModels {
 		remote = append(remote, modelInfo{
-			ID:       id,
-			Name:     id,
-			Endpoint: s.appConfig.RemoteEndpoint,
+			ID:             id,
+			Source:         "remote",
+			Endpoint:       s.appConfig.RemoteEndpoint,
+			RequiresAPIKey: s.appConfig.RemoteAPIKey == "",
 		})
 	}
 	writeJSON(w, http.StatusOK, modelsResponse{
@@ -359,6 +365,7 @@ type scenarioInfo struct {
 	Difficulty string `json:"difficulty"`
 	MaxPoints  int    `json:"maxPoints"`
 	Prompt     string `json:"prompt"`
+	Track      string `json:"track"`
 }
 
 type modelsResponse struct {
@@ -367,9 +374,10 @@ type modelsResponse struct {
 }
 
 type modelInfo struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Endpoint string `json:"endpoint,omitempty"`
+	ID             string `json:"id"`
+	Source         string `json:"source"`
+	Endpoint       string `json:"endpoint"`
+	RequiresAPIKey bool   `json:"requiresApiKey,omitempty"`
 }
 
 type openAIModelsResponse struct {
@@ -420,7 +428,7 @@ func (s *server) discoverLocalModels(ctx context.Context) []modelInfo {
 		}
 		models = append(models, modelInfo{
 			ID:       m.ID,
-			Name:     m.ID,
+			Source:   "local",
 			Endpoint: endpoint,
 		})
 	}

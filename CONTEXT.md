@@ -42,3 +42,7 @@ The behavior defined by the original TypeScript scenario in `1337hero/scaffold-b
 
 **Hidden Test**:
 A test fixture kept outside the model workspace and copied into a temporary directory only during evaluation so the model cannot read the assertions.
+
+**Model**:
+A selectable Large Language Model available through an inference endpoint. In the API it is represented by an `id`, `source` (`local` or `remote`), `endpoint`, and an optional `requiresApiKey` flag.
+_Avoid_: LLM, inference target.

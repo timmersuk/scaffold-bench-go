@@ -5,17 +5,19 @@ export interface ScenarioInfo {
   difficulty: string;
   maxPoints: number;
   prompt: string;
+  track: string;
 }
 
 export interface ModelsResponse {
-  local: ModelInfo[];
-  remote: ModelInfo[];
+  local: Model[];
+  remote: Model[];
 }
 
-export interface ModelInfo {
+export interface Model {
   id: string;
-  name: string;
-  endpoint?: string;
+  source: "local" | "remote";
+  endpoint: string;
+  requiresApiKey?: boolean;
 }
 
 export interface RunSummary {
