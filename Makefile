@@ -13,15 +13,15 @@ OSES := linux windows
         compose-up compose-down
 
 # ------------------------------------------------------------------
-# 1️⃣ Build the frontend using a node container (pnpm is available there).
+# 1️⃣ Build the frontend using a bun container.
 # ------------------------------------------------------------------
 frontend-docker:
-	@echo "Building frontend with node:20-bookworm…"
+	@echo "Building frontend with oven/bun…"
 	@docker run --rm -e CI=true \
 	    -v "$(CURDIR):/src" \
 	    -w /src \
-	    node:20-bookworm \
-	    sh -c "make frontend"
+	    oven/bun:latest \
+	    sh -c "cd frontend && bun install --frozen-lockfile && bun run build"
 
 # ------------------------------------------------------------------
 # 2️⃣ Build the Go binaries using a golang container.
@@ -45,7 +45,7 @@ build: frontend build-go-local
 # ------------------------------------------------------------------
 frontend:
 	@echo "Building frontend locally…"
-	@corepack enable && corepack prepare pnpm@10.23.0 --activate && pnpm --dir frontend install --frozen-lockfile && pnpm --dir frontend build
+	@cd frontend && bun install --frozen-lockfile && bun run build
 
 # ------------------------------------------------------------------
 # 5️⃣ Build the Go binaries for all supported architectures (cross‑compile) locally.
@@ -66,7 +66,7 @@ test: frontend
 	go test ./...
 
 dev:
-	pnpm --dir frontend dev
+	cd frontend && bun dev
 
 run:
 	go run ./cmd/server

@@ -24,8 +24,6 @@ permissions:
 
 env:
   GO_VERSION: "1.26.x"
-  NODE_VERSION: "20"
-  PNPM_VERSION: "10.23.0"
   DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || format('{0}/scaffold-bench-go', github.repository_owner) }}
 
 jobs:
@@ -41,21 +39,14 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Enable pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install frontend dependencies
-        run: pnpm --dir frontend install --frozen-lockfile
+        run: bun --cwd frontend install --frozen-lockfile
 
       - name: Build embedded frontend
-        run: pnpm --dir frontend build
+        run: bun --cwd frontend run build
 
       - name: Run Go tests
         run: go test ./...
@@ -93,14 +84,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y make
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Enable pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@${PNPM_VERSION} --activate
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
 
       - uses: actions/setup-go@v5
         with:
