@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 
+FROM debian:bookworm-slim
+
+# Make the buildx platform args available in this stage.
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
-
-FROM debian:bookworm-slim
 
 RUN groupadd --system --gid 10001 scaffold && \
     useradd --system --uid 10001 --gid scaffold --home-dir /data --shell /sbin/nologin scaffold
