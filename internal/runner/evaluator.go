@@ -1,12 +1,10 @@
 package runner
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -187,8 +185,8 @@ func runFilesChangedOnly(in Input, params map[string]any) (bool, string) {
 }
 
 func runBehavioralTest(ctx context.Context, in Input, params map[string]any) (bool, string) {
-	command := stringParam(params, "runner")
-	if command == "" {
+	runnerName := stringParam(params, "runner")
+	if runnerName == "" {
 		return false, "missing 'runner' parameter"
 	}
 
@@ -207,14 +205,23 @@ func runBehavioralTest(ctx context.Context, in Input, params map[string]any) (bo
 		}
 	}
 
+	// Find the hidden fixture whose destination matches the requested testFile.
+	testFile := stringParam(params, "testFile")
+	var hiddenSrc string
 	for _, hf := range in.Manifest.HiddenFixtures {
-		if hf.Src == "" || hf.Dest == "" {
-			continue
+		if hf.Dest == testFile {
+			hiddenSrc = hf.Src
+			break
 		}
-		src := filepath.Join(in.Dir, hf.Src)
-		dst := filepath.Join(tmp, hf.Dest)
+	}
+	if hiddenSrc != "" {
+		if in.HiddenDir == "" {
+			return false, fmt.Sprintf("hidden fixture %s required but hidden dir not set", testFile)
+		}
+		src := filepath.Join(in.HiddenDir, testFile)
+		dst := filepath.Join(tmp, testFile)
 		if err := copyFile(src, dst); err != nil {
-			return false, fmt.Sprintf("copy hidden fixture %s: %v", hf.Src, err)
+			return false, fmt.Sprintf("copy hidden fixture %s: %v", testFile, err)
 		}
 	}
 
@@ -223,6 +230,7 @@ func runBehavioralTest(ctx context.Context, in Input, params map[string]any) (bo
 		timeout = 30 * time.Second
 	}
 
+	command := behavioralCommand(runnerName, testFile, tmp)
 	ok, output, err := runShellCommand(ctx, tmp, command, timeout)
 	if err != nil {
 		return false, fmt.Sprintf("behavioral test failed: %v", err)
@@ -231,6 +239,34 @@ func runBehavioralTest(ctx context.Context, in Input, params map[string]any) (bo
 		return false, fmt.Sprintf("behavioral test command exited non-zero: %s", output)
 	}
 	return true, fmt.Sprintf("behavioral test passed: %s", output)
+}
+
+// behavioralCommand builds the shell command for a behavioral_test check.
+// Supported runners: bun-test, go-test, cargo-test, pytest, shell, or a literal
+// command template.
+func behavioralCommand(runner, testFile, tmp string) string {
+	switch runner {
+	case "bun-test":
+		return fmt.Sprintf("bun test %s", testFile)
+	case "go-test":
+		return fmt.Sprintf("go test %s", testFile)
+	case "cargo-test":
+		return "cargo test"
+	case "pytest":
+		return fmt.Sprintf("pytest %s", testFile)
+	case "shell":
+		if testFile == "" {
+			return "exit 0"
+		}
+		data, err := os.ReadFile(filepath.Join(tmp, testFile))
+		if err != nil {
+			return fmt.Sprintf("echo 'cannot read testFile %s: %v' && exit 1", testFile, err)
+		}
+		return strings.TrimSpace(string(data))
+	default:
+		// Literal command template.
+		return runner
+	}
 }
 
 func runCommandCheck(ctx context.Context, in Input, params map[string]any) (bool, string) {
@@ -332,47 +368,7 @@ func matchPattern(pattern, content string) (bool, error) {
 }
 
 func runShellCommand(ctx context.Context, cwd, command string, timeout time.Duration) (bool, string, error) {
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
-
-	var shell, arg string
-	if runtime.GOOS == "windows" {
-		shell = os.Getenv("COMSPEC")
-		if shell == "" {
-			shell = "cmd.exe"
-		}
-		arg = "/c"
-	} else {
-		shell = os.Getenv("SHELL")
-		if shell == "" {
-			shell = "/bin/sh"
-		}
-		arg = "-lc"
-	}
-
-	cmd := exec.CommandContext(ctx, shell, arg, command)
-	cmd.Dir = cwd
-	cmd.Env = shellEnv()
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	out := strings.TrimSpace(stdout.String())
-	if out == "" {
-		out = strings.TrimSpace(stderr.String())
-	}
-	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return false, out, fmt.Errorf("timed out")
-		}
-		return false, out, err
-	}
-	return true, out, nil
+	return executeCommand(ctx, cwd, command, shellEnv(), timeout)
 }
 
 func shellEnv() []string {
