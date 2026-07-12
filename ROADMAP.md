@@ -16,7 +16,7 @@ A single-binary Go + Vite port of [scaffold-bench](https://github.com/1337hero/s
 | Scenario manifest schema | ✅ Done | `docs/design/scenario-manifest.md`, YAML/JSON loader, Go evaluator interface |
 | Run engine & evaluator | 🚧 Partial | Core checks complete; `requires` enforcement and trace-semantic fixes landed (#24, #25). Native Go AST checks implemented for SB-25 (#14, ADR-0002). Remaining gaps: parallel tool execution (#17), preflight metadata (#18). |
 | Scenarios ported | 🚧 In progress | SB-01 and SB-25 ported and validated against golden workspaces; remaining 48 scenarios not started |
-| Frontend wiring | ❌ Not started | API exists (`/api/scenarios`, `/api/runs`, SSE stream), but `App.tsx` is still placeholder views |
+| Frontend wiring | 🚧 API ready | `/api/scenarios`, `/api/models`, `/api/runs`, and SSE stream are wired; `App.tsx` still has placeholder views |
 | One-shot lab | ❌ Not started | API stubs only (`/api/oneshot/*` return empty) |
 | Reports / leaderboard | ❌ Not started | `/api/report/data` returns empty skeleton |
 | Frontend tests | ❌ Missing | No Vitest / React Testing Library setup |
@@ -52,7 +52,7 @@ All closed design issues from the wayfinder map:
 
 ### API / models
 
-- [ ] [#15 Expose scenarios and models to the frontend](https://github.com/timmersuk/scaffold-bench-go/issues/15)
+- [x] [#15 Expose scenarios and models to the frontend](https://github.com/timmersuk/scaffold-bench-go/issues/15)
 - [ ] [#21 Query BENCH_REMOTE_ENDPOINT /v1/models for dynamic remote model list](https://github.com/timmersuk/scaffold-bench-go/issues/21)
 - [ ] [#22 Add display names for models in /api/models response](https://github.com/timmersuk/scaffold-bench-go/issues/22)
 - [ ] [#23 Reuse HTTP client for local /v1/models discovery](https://github.com/timmersuk/scaffold-bench-go/issues/23)
