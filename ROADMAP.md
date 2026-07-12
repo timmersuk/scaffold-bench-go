@@ -1,0 +1,89 @@
+# Roadmap: scaffold-bench-go
+
+This document tracks how much of the Go/Vite port of scaffold-bench is implemented. It is derived from the wayfinder map ([#1](https://github.com/timmersuk/scaffold-bench-go/issues/1)) and the open implementation backlog.
+
+## Destination
+
+A single-binary Go + Vite port of [scaffold-bench](https://github.com/1337hero/scaffold-bench). The Go server provides the benchmark REST API and SSE event stream; the React frontend in `frontend/` is built into `internal/web/dist` and embedded in the binary.
+
+## Progress overview
+
+| Area | Status | Notes |
+|------|--------|-------|
+| Architecture & project skeleton | ✅ Done | Go 1.26, stdlib HTTP, SQLite, Vite+React+Tailwind, Makefile, Docker, CI |
+| Domain model & REST API | ✅ Designed | Core entities and `/api/*` routes defined in ADRs / issues |
+| SQLite schema & persistence | ✅ Done | Migrations, runs/scenario_runs/events tables, WAL |
+| Scenario manifest schema | ✅ Done | `docs/design/scenario-manifest.md`, YAML/JSON loader, Go evaluator interface |
+| Run engine & evaluator | 🚧 Partial | Engine runs scenarios end-to-end, evaluator supports core checks; gap: AST plugin, `requires` enforcement, trace semantics (#24, #25) |
+| Scenarios ported | 🚧 In progress | SB-01 port + validation in PR #26; remaining 49 scenarios not started |
+| Frontend wiring | ❌ Not started | API exists (`/api/scenarios`, `/api/runs`, SSE stream), but `App.tsx` is still placeholder views |
+| One-shot lab | ❌ Not started | API stubs only (`/api/oneshot/*` return empty) |
+| Reports / leaderboard | ❌ Not started | `/api/report/data` returns empty skeleton |
+| Frontend tests | ❌ Missing | No Vitest / React Testing Library setup |
+
+## Decisions captured
+
+All closed design issues from the wayfinder map:
+
+- [x] [#2 Define MVP scope and feature cut for the Go rewrite](https://github.com/timmersuk/scaffold-bench-go/issues/2)
+- [x] [#3 Choose scenario execution strategy](https://github.com/timmersuk/scaffold-bench-go/issues/3)
+- [x] [#4 Select the Go HTTP stack and project conventions](https://github.com/timmersuk/scaffold-bench-go/issues/4)
+- [x] [#5 Design the domain model and REST API contract](https://github.com/timmersuk/scaffold-bench-go/issues/5)
+- [x] [#6 Design the SQLite schema and persistence layer](https://github.com/timmersuk/scaffold-bench-go/issues/6)
+- [x] [#7 Prototype the frontend architecture and main views](https://github.com/timmersuk/scaffold-bench-go/issues/7)
+- [x] [#8 Set up the initial project skeleton and build pipeline](https://github.com/timmersuk/scaffold-bench-go/issues/8)
+- [x] [#9 Design the neutral scenario manifest schema and evaluator interface](https://github.com/timmersuk/scaffold-bench-go/issues/9)
+
+## Implementation backlog
+
+### Run engine & evaluator
+
+- [ ] [#14 Add an AST plugin boundary for ast_* rubric checks](https://github.com/timmersuk/scaffold-bench-go/issues/14)
+- [ ] [#17 Support parallel tool execution and tool-call hooks](https://github.com/timmersuk/scaffold-bench-go/issues/17)
+- [ ] [#18 Add run metadata and preflight checks](https://github.com/timmersuk/scaffold-bench-go/issues/18)
+- [ ] [#24 Fix trace_read_before_edit to require an edit/write](https://github.com/timmersuk/scaffold-bench-go/issues/24) — covered by PR #26
+- [ ] [#25 Runner engine does not enforce manifest requires list](https://github.com/timmersuk/scaffold-bench-go/issues/25) — covered by PR #26
+
+### Scenarios
+
+- [ ] [#16 Port the first real scenario (SB-01) and validate its score](https://github.com/timmersuk/scaffold-bench-go/issues/16) — PR #26
+- [ ] Port SB-02 through SB-50 (not yet ticketed in detail)
+
+### API / models
+
+- [ ] [#15 Expose scenarios and models to the frontend](https://github.com/timmersuk/scaffold-bench-go/issues/15)
+- [ ] [#21 Query BENCH_REMOTE_ENDPOINT /v1/models for dynamic remote model list](https://github.com/timmersuk/scaffold-bench-go/issues/21)
+- [ ] [#22 Add display names for models in /api/models response](https://github.com/timmersuk/scaffold-bench-go/issues/22)
+- [ ] [#23 Reuse HTTP client for local /v1/models discovery](https://github.com/timmersuk/scaffold-bench-go/issues/23)
+
+### Frontend & UX
+
+- [ ] Wire Dashboard to `/api/scenarios`, `/api/models`, and SSE run stream
+- [ ] Wire RunHistory to stored runs and report data
+- [ ] Implement OneShotLab views and connect to `/api/oneshot/*`
+- [ ] Add Vitest + React Testing Library and component tests
+
+### Infrastructure
+
+- [x] Dockerfile runtime image has `bun` and `golang-go` — added in PR #26
+
+## Out of scope
+
+From [#1](https://github.com/timmersuk/scaffold-bench-go/issues/1):
+
+- Rewriting the 50 scenario definitions beyond the neutral manifest + Go evaluator work.
+- Bun/TypeScript-based orchestration of the run loop.
+- Authentication for the web UI or API.
+- New benchmark dimensions, new scoring rubrics, or new model providers.
+- Bubblewrap sandboxing of scenario workspaces.
+
+## How to update this roadmap
+
+1. Create or close an issue for the work.
+2. Update the checklist and status table in this file.
+3. Reference this document in related PRs so the roadmap stays current.
+
+## Tracking links
+
+- [GitHub Issues](https://github.com/timmersuk/scaffold-bench-go/issues)
+- [Project board: scaffold-bench-go roadmap](https://github.com/users/timmersuk/projects/2)
