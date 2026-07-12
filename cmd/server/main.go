@@ -50,10 +50,12 @@ func run() error {
 	engine := runner.NewEngine(store, events, cfg, registry)
 
 	router, err := api.NewRouter(api.Config{
-		Store:   store,
-		Events:  events,
-		Runner:  engine,
-		BuildID: BuildID,
+		Store:     store,
+		Events:    events,
+		Runner:    engine,
+		Registry:  registry,
+		AppConfig: cfg,
+		BuildID:   BuildID,
 	})
 	if err != nil {
 		return err

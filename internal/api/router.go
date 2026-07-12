@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/timmersuk/scaffold-bench-go/internal/config"
 	"github.com/timmersuk/scaffold-bench-go/internal/realtime"
 	"github.com/timmersuk/scaffold-bench-go/internal/runner"
 	"github.com/timmersuk/scaffold-bench-go/internal/storage"
@@ -21,11 +23,13 @@ import (
 
 // Config holds the dependencies needed by the HTTP router.
 type Config struct {
-	Store    *storage.Store
-	Events   *realtime.Hub
-	Runner   Runner
-	BuildID  string
-	Frontend fs.FS
+	Store     *storage.Store
+	Events    *realtime.Hub
+	Runner    Runner
+	Registry  *runner.Registry
+	AppConfig config.Config
+	BuildID   string
+	Frontend  fs.FS
 }
 
 // Runner orchestrates benchmark runs.
@@ -46,6 +50,9 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	if cfg.Runner == nil {
 		return nil, errors.New("runner is required")
 	}
+	if cfg.Registry == nil {
+		return nil, errors.New("registry is required")
+	}
 
 	frontend, err := fs.Sub(web.Files, "dist")
 	if err != nil {
@@ -53,11 +60,13 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	}
 
 	srv := &server{
-		store:    cfg.Store,
-		events:   cfg.Events,
-		runner:   cfg.Runner,
-		buildID:  cfg.BuildID,
-		frontend: frontend,
+		store:     cfg.Store,
+		events:    cfg.Events,
+		runner:    cfg.Runner,
+		registry:  cfg.Registry,
+		appConfig: cfg.AppConfig,
+		buildID:   cfg.BuildID,
+		frontend:  frontend,
 	}
 
 	apiMux := http.NewServeMux()
@@ -80,11 +89,13 @@ func NewRouter(cfg Config) (http.Handler, error) {
 }
 
 type server struct {
-	store    *storage.Store
-	events   *realtime.Hub
-	runner   Runner
-	buildID  string
-	frontend fs.FS
+	store     *storage.Store
+	events    *realtime.Hub
+	runner    Runner
+	registry  *runner.Registry
+	appConfig config.Config
+	buildID   string
+	frontend  fs.FS
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -95,15 +106,38 @@ func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *server) handleScenarios(w http.ResponseWriter, r *http.Request) {
-	// TODO: load from scenario registry.
-	writeJSON(w, http.StatusOK, []map[string]any{})
+	ids := s.registry.IDs()
+	infos := make([]scenarioInfo, 0, len(ids))
+	for _, id := range ids {
+		sc, ok := s.registry.Get(id)
+		if !ok {
+			continue
+		}
+		infos = append(infos, scenarioInfo{
+			ID:         sc.ID,
+			Name:       sc.Name,
+			Category:   sc.Category,
+			Difficulty: sc.Manifest.Meta.Difficulty,
+			MaxPoints:  sc.MaxPoints,
+			Prompt:     sc.Prompt,
+		})
+	}
+	writeJSON(w, http.StatusOK, infos)
 }
 
 func (s *server) handleModels(w http.ResponseWriter, r *http.Request) {
-	// TODO: discover local + remote models.
-	writeJSON(w, http.StatusOK, map[string]any{
-		"local":  []any{},
-		"remote": []any{},
+	local := s.discoverLocalModels(r.Context())
+	remote := make([]modelInfo, 0, len(s.appConfig.RemoteModels))
+	for _, id := range s.appConfig.RemoteModels {
+		remote = append(remote, modelInfo{
+			ID:       id,
+			Name:     id,
+			Endpoint: s.appConfig.RemoteEndpoint,
+		})
+	}
+	writeJSON(w, http.StatusOK, modelsResponse{
+		Local:  local,
+		Remote: remote,
 	})
 }
 
@@ -269,7 +303,7 @@ func (s *server) handleOneshotRuns(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleReportData(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"models": []any{},
+		"models":     []any{},
 		"categories": []any{},
 		"difficulty": []any{},
 	})
@@ -316,6 +350,81 @@ func serveStaticFile(w http.ResponseWriter, r *http.Request, files fs.FS, name s
 	}
 	http.ServeContent(w, r, name, stat.ModTime(), bytes.NewReader(data))
 	return true
+}
+
+type scenarioInfo struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Category   string `json:"category"`
+	Difficulty string `json:"difficulty"`
+	MaxPoints  int    `json:"maxPoints"`
+	Prompt     string `json:"prompt"`
+}
+
+type modelsResponse struct {
+	Local  []modelInfo `json:"local"`
+	Remote []modelInfo `json:"remote"`
+}
+
+type modelInfo struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Endpoint string `json:"endpoint,omitempty"`
+}
+
+type openAIModelsResponse struct {
+	Data []openAIModel `json:"data"`
+}
+
+type openAIModel struct {
+	ID string `json:"id"`
+}
+
+func (s *server) discoverLocalModels(ctx context.Context) []modelInfo {
+	endpoint := strings.TrimRight(s.appConfig.LocalEndpoint, "/")
+	if endpoint == "" {
+		return []modelInfo{}
+	}
+
+	url := endpoint + "/v1/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		slog.Error("build local models request", "err", err)
+		return []modelInfo{}
+	}
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Debug("local models endpoint unreachable", "endpoint", endpoint, "err", err)
+		return []modelInfo{}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Debug("local models endpoint returned non-ok status", "status", resp.StatusCode)
+		return []modelInfo{}
+	}
+
+	var parsed openAIModelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		slog.Error("decode local models response", "err", err)
+		return []modelInfo{}
+	}
+
+	models := make([]modelInfo, 0, len(parsed.Data))
+	for _, m := range parsed.Data {
+		if m.ID == "" {
+			continue
+		}
+		models = append(models, modelInfo{
+			ID:       m.ID,
+			Name:     m.ID,
+			Endpoint: endpoint,
+		})
+	}
+	return models
 }
 
 type errorResponse struct {
