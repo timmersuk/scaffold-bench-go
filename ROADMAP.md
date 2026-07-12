@@ -42,7 +42,7 @@ All closed design issues from the wayfinder map:
 - [ ] [#17 Support parallel tool execution and tool-call hooks](https://github.com/timmersuk/scaffold-bench-go/issues/17)
 - [ ] [#18 Add run metadata and preflight checks](https://github.com/timmersuk/scaffold-bench-go/issues/18)
 - [ ] [#24 Fix trace_read_before_edit to require an edit/write](https://github.com/timmersuk/scaffold-bench-go/issues/24) — covered by PR #26
-- [ ] [#25 Runner engine does not enforce manifest requires list](https://github.com/timmersuk/scaffold-bench-go/issues/25) — covered by PR #26
+- [ ] [#25 Runner engine does not enforce manifest requires list](https://github.com/timmersuk/scaffold-bench-go/issues/25)
 
 ### Scenarios
 
