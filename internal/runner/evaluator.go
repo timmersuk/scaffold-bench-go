@@ -61,14 +61,29 @@ func (e *Evaluator) Evaluate(ctx context.Context, in Input) model.Evaluation {
 		_ = max
 	}
 
+	ev.RubricKind = in.Manifest.Meta.RubricKind
 	if ev.MaxPoints > 0 {
-		switch {
-		case ev.Points >= ev.MaxPoints:
-			ev.Status = "pass"
-		case ev.Points > 0:
-			ev.Status = "partial"
+		switch ev.RubricKind {
+		case "10pt":
+			// Match upstream scaffold-bench thresholds:
+			// >= 9 pass, 5-8 partial, <= 4 fail.
+			switch {
+			case ev.Points >= 9:
+				ev.Status = "pass"
+			case ev.Points >= 5:
+				ev.Status = "partial"
+			default:
+				ev.Status = "fail"
+			}
 		default:
-			ev.Status = "fail"
+			switch {
+			case ev.Points >= ev.MaxPoints:
+				ev.Status = "pass"
+			case ev.Points > 0:
+				ev.Status = "partial"
+			default:
+				ev.Status = "fail"
+			}
 		}
 	} else {
 		ev.Status = "pass"
@@ -335,7 +350,7 @@ func runTraceReadBeforeEdit(in Input, params map[string]any) (bool, string) {
 	}
 
 	if editIndex == -1 {
-		return true, "no edit/write of the target path was recorded"
+		return false, "no edit/write of the target path was recorded"
 	}
 	if readBefore {
 		return true, "target path was read before first edit/write"
