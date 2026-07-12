@@ -261,8 +261,13 @@ func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest
 	}
 	defer os.RemoveAll(workDir)
 
+	workspaceRoot := scenario.Manifest.Workspace.Root
+	if workspaceRoot == "" {
+		workspaceRoot = "playground"
+	}
+
 	if scenario.WorkspaceSource != "" {
-		dest := filepath.Join(workDir, "playground")
+		dest := filepath.Join(workDir, workspaceRoot)
 		if err := copyDir(scenario.WorkspaceSource, dest); err != nil {
 			res.Status = model.ScenarioFail
 			res.Error = fmt.Sprintf("copy workspace: %s", err)
@@ -271,8 +276,23 @@ func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest
 			return res
 		}
 	}
-	// Ensure playground directory exists for the demo scenario.
-	_ = os.MkdirAll(filepath.Join(workDir, "playground"), 0o755)
+	// Ensure the workspace root directory exists.
+	_ = os.MkdirAll(filepath.Join(workDir, workspaceRoot), 0o755)
+
+	// Copy any setup files defined by the manifest.
+	if scenario.Manifest.Setup != nil {
+		for _, mapping := range scenario.Manifest.Setup.Files {
+			src := filepath.Join(scenario.Dir, mapping.Src)
+			dst := filepath.Join(workDir, mapping.Dest)
+			if err := copyFile(src, dst); err != nil {
+				res.Status = model.ScenarioFail
+				res.Error = fmt.Sprintf("copy setup file: %s", err)
+				res.Evaluation = errorEvaluation(res.Error, scenario.MaxPoints)
+				e.finishScenario(runID, scenario, ar, res)
+				return res
+			}
+		}
+	}
 
 	agentCfg := agent.Config{
 		WorkDir:      workDir,
@@ -289,7 +309,21 @@ func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest
 	}
 	output := agent.Run(ctx, agentCfg)
 
-	eval := scenario.Evaluator(ctx, workDir, output.ToolCalls)
+	pristineDir := scenario.PristineDir
+	if pristineDir == "" {
+		empty, _ := os.MkdirTemp("", "sb-pristine-")
+		defer os.RemoveAll(empty)
+		pristineDir = empty
+	}
+
+	evaluator := NewEvaluator()
+	eval := evaluator.Evaluate(ctx, Input{
+		Manifest:    scenario.Manifest,
+		WorkDir:     workDir,
+		PristineDir: pristineDir,
+		Dir:         scenario.Dir,
+		ToolCalls:   output.ToolCalls,
+	})
 	res.Evaluation = eval
 	res.Points = eval.Points
 	res.Status = model.ScenarioStatus(eval.Status)
@@ -308,13 +342,7 @@ func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest
 		}
 	}
 
-	pristineDir := scenario.PristineDir
-	if pristineDir == "" {
-		empty, _ := os.MkdirTemp("", "sb-pristine-")
-		defer os.RemoveAll(empty)
-		pristineDir = empty
-	}
-	archive, err := captureWorkspace(filepath.Join(workDir, "playground"), pristineDir, "playground")
+	archive, err := captureWorkspace(filepath.Join(workDir, workspaceRoot), pristineDir, workspaceRoot)
 	if err != nil {
 		slog.Error("capture workspace", "run_id", runID, "scenario", scenario.ID, "err", err)
 	} else {
