@@ -16,7 +16,7 @@ A single-binary Go + Vite port of [scaffold-bench](https://github.com/1337hero/s
 | Scenario manifest schema | ✅ Done | `docs/design/scenario-manifest.md`, YAML/JSON loader, Go evaluator interface |
 | Run engine & evaluator | 🚧 Partial | Core checks complete; `requires` enforcement and trace-semantic fixes landed (#24, #25). Native Go AST checks implemented for SB-25 (#14, ADR-0002). Remaining gaps: parallel tool execution (#17), preflight metadata (#18). |
 | Scenarios ported | 🚧 In progress | SB-01 and SB-25 ported and validated against golden workspaces; remaining 48 scenarios not started |
-| Frontend wiring | 🚧 API ready | `/api/scenarios`, `/api/models`, `/api/runs`, and SSE stream are wired; `App.tsx` still has placeholder views |
+| Frontend wiring | 🚧 Partial | `/api/scenarios`, `/api/models`, and SSE run stream are wired; Dashboard view implemented in PR #29. RunHistory and OneShotLab remain placeholders. |
 | One-shot lab | ❌ Not started | API stubs only (`/api/oneshot/*` return empty) |
 | Reports / leaderboard | ❌ Not started | `/api/report/data` returns empty skeleton |
 | Frontend tests | ❌ Missing | No Vitest / React Testing Library setup |
@@ -59,7 +59,7 @@ All closed design issues from the wayfinder map:
 
 ### Frontend & UX
 
-- [ ] Wire Dashboard to `/api/scenarios`, `/api/models`, and SSE run stream
+- [x] Wire Dashboard to `/api/scenarios`, `/api/models`, and SSE run stream — implemented in PR #29
 - [ ] Wire RunHistory to stored runs and report data
 - [ ] Implement OneShotLab views and connect to `/api/oneshot/*`
 - [ ] Add Vitest + React Testing Library and component tests
