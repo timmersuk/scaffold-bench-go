@@ -65,16 +65,17 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	}
 
 	srv := &server{
-		store:     cfg.Store,
-		events:    cfg.Events,
-		runner:    cfg.Runner,
-		registry:  cfg.Registry,
-		appConfig: cfg.AppConfig,
-		buildID:   cfg.BuildID,
-		frontend:  frontend,
+		store:       cfg.Store,
+		events:      cfg.Events,
+		runner:      cfg.Runner,
+		registry:    cfg.Registry,
+		appConfig:   cfg.AppConfig,
+		buildID:     cfg.BuildID,
+		frontend:    frontend,
 		modelsCache: &modelsCache{
 			ttl: cfg.AppConfig.RemoteModelCacheTTLSeconds,
 		},
+		httpClient: &http.Client{Timeout: 5 * time.Second},
 	}
 
 	apiMux := http.NewServeMux()
@@ -105,6 +106,7 @@ type server struct {
 	buildID     string
 	frontend    fs.FS
 	modelsCache *modelsCache
+	httpClient  *http.Client
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -544,7 +546,7 @@ func (s *server) discoverRemoteModels(ctx context.Context) []modelInfo {
 		req.Header.Set("Authorization", "Bearer "+s.appConfig.RemoteAPIKey)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := s.httpClient
 	resp, err := client.Do(req)
 	if err != nil {
 		slog.Debug("remote models endpoint unreachable", "endpoint", endpoint, "err", err)
@@ -682,7 +684,7 @@ func (s *server) discoverLocalModels(ctx context.Context) []modelInfo {
 	}
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := s.httpClient
 	resp, err := client.Do(req)
 	if err != nil {
 		slog.Debug("local models endpoint unreachable", "endpoint", endpoint, "err", err)
