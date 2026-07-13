@@ -53,7 +53,7 @@ All closed design issues from the wayfinder map:
 ### API / models
 
 - [x] [#15 Expose scenarios and models to the frontend](https://github.com/timmersuk/scaffold-bench-go/issues/15)
-- [ ] [#21 Query BENCH_REMOTE_ENDPOINT /v1/models for dynamic remote model list](https://github.com/timmersuk/scaffold-bench-go/issues/21)
+- [x] [#21 Query BENCH_REMOTE_ENDPOINT /v1/models for dynamic remote model list](https://github.com/timmersuk/scaffold-bench-go/issues/21) — dynamic discovery merged with static `BENCH_REMOTE_MODELS` entries, with brief request-time cache
 - [ ] [#22 Add display names for models in /api/models response](https://github.com/timmersuk/scaffold-bench-go/issues/22)
 - [ ] [#23 Reuse HTTP client for local /v1/models discovery](https://github.com/timmersuk/scaffold-bench-go/issues/23)
 - [ ] [#34 Add runtime configuration persistence with REST API and frontend UI](https://github.com/timmersuk/scaffold-bench-go/issues/34) — persists endpoint/model list settings in a JSON file in the data folder, editable via the UI only when no run is active

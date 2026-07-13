@@ -14,6 +14,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/timmersuk/scaffold-bench-go/internal/config"
@@ -70,6 +71,9 @@ func NewRouter(cfg Config) (http.Handler, error) {
 		appConfig: cfg.AppConfig,
 		buildID:   cfg.BuildID,
 		frontend:  frontend,
+		modelsCache: &modelsCache{
+			ttl: cfg.AppConfig.RemoteModelCacheTTLSeconds,
+		},
 	}
 
 	apiMux := http.NewServeMux()
@@ -92,13 +96,14 @@ func NewRouter(cfg Config) (http.Handler, error) {
 }
 
 type server struct {
-	store     *storage.Store
-	events    *realtime.Hub
-	runner    Runner
-	registry  *runner.Registry
-	appConfig config.Config
-	buildID   string
-	frontend  fs.FS
+	store       *storage.Store
+	events      *realtime.Hub
+	runner      Runner
+	registry    *runner.Registry
+	appConfig   config.Config
+	buildID     string
+	frontend    fs.FS
+	modelsCache *modelsCache
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -135,15 +140,7 @@ func (s *server) handleScenarios(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleModels(w http.ResponseWriter, r *http.Request) {
 	local := s.discoverLocalModels(r.Context())
-	remote := make([]modelInfo, 0, len(s.appConfig.RemoteModels))
-	for _, id := range s.appConfig.RemoteModels {
-		remote = append(remote, modelInfo{
-			ID:             id,
-			Source:         "remote",
-			Endpoint:       s.appConfig.RemoteEndpoint,
-			RequiresAPIKey: s.appConfig.RemoteAPIKey == "",
-		})
-	}
+	remote := s.discoverRemoteModels(r.Context())
 	writeJSON(w, http.StatusOK, modelsResponse{
 		Local:  local,
 		Remote: remote,
@@ -482,6 +479,138 @@ type modelInfo struct {
 	Source         string `json:"source"`
 	Endpoint       string `json:"endpoint"`
 	RequiresAPIKey bool   `json:"requiresApiKey,omitempty"`
+}
+
+type modelListKey struct {
+	id     string
+	source string
+}
+
+type cachedModels struct {
+	models []modelInfo
+	ts     time.Time
+}
+
+type modelsCache struct {
+	mu    sync.Mutex
+	cache *cachedModels
+	ttl   int
+}
+
+func (c *modelsCache) get() ([]modelInfo, bool) {
+	if c == nil || c.ttl <= 0 {
+		return nil, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cache == nil {
+		return nil, false
+	}
+	if time.Since(c.cache.ts) > time.Duration(c.ttl)*time.Second {
+		return nil, false
+	}
+	return c.cache.models, true
+}
+
+func (c *modelsCache) set(models []modelInfo) {
+	if c == nil || c.ttl <= 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cache = &cachedModels{models: models, ts: time.Now()}
+}
+
+func (s *server) discoverRemoteModels(ctx context.Context) []modelInfo {
+	endpoint := strings.TrimRight(s.appConfig.RemoteEndpoint, "/")
+	if endpoint == "" {
+		return s.staticRemoteModels()
+	}
+
+	if cached, ok := s.modelsCache.get(); ok {
+		return cached
+	}
+
+	url := endpoint + "/v1/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		slog.Error("build remote models request", "err", err)
+		return s.staticRemoteModels()
+	}
+	req.Header.Set("Accept", "application/json")
+	if s.appConfig.RemoteAPIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+s.appConfig.RemoteAPIKey)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Debug("remote models endpoint unreachable", "endpoint", endpoint, "err", err)
+		return s.staticRemoteModels()
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Debug("remote models endpoint returned non-ok status", "status", resp.StatusCode)
+		return s.staticRemoteModels()
+	}
+
+	var parsed openAIModelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		slog.Error("decode remote models response", "err", err)
+		return s.staticRemoteModels()
+	}
+
+	seen := make(map[modelListKey]struct{}, len(parsed.Data)+len(s.appConfig.RemoteModels))
+	models := make([]modelInfo, 0, len(parsed.Data)+len(s.appConfig.RemoteModels))
+
+	for _, m := range parsed.Data {
+		if m.ID == "" {
+			continue
+		}
+		key := modelListKey{id: m.ID, source: "remote"}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		models = append(models, modelInfo{
+			ID:             m.ID,
+			Source:         "remote",
+			Endpoint:       endpoint,
+			RequiresAPIKey: s.appConfig.RemoteAPIKey == "",
+		})
+	}
+
+	for _, id := range s.appConfig.RemoteModels {
+		key := modelListKey{id: id, source: "remote"}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		models = append(models, modelInfo{
+			ID:             id,
+			Source:         "remote",
+			Endpoint:       endpoint,
+			RequiresAPIKey: s.appConfig.RemoteAPIKey == "",
+		})
+	}
+
+	s.modelsCache.set(models)
+	return models
+}
+
+func (s *server) staticRemoteModels() []modelInfo {
+	models := make([]modelInfo, 0, len(s.appConfig.RemoteModels))
+	endpoint := strings.TrimRight(s.appConfig.RemoteEndpoint, "/")
+	for _, id := range s.appConfig.RemoteModels {
+		models = append(models, modelInfo{
+			ID:             id,
+			Source:         "remote",
+			Endpoint:       endpoint,
+			RequiresAPIKey: s.appConfig.RemoteAPIKey == "",
+		})
+	}
+	return models
 }
 
 type openAIModelsResponse struct {
