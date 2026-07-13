@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/timmersuk/scaffold-bench-go/internal/model"
 )
@@ -70,6 +72,200 @@ func (s *Store) GetRun(id string) (model.Run, error) {
 	r.Error = errMsg.String
 	_ = json.Unmarshal([]byte(scenarioIDs), &r.ScenarioIDs)
 	return r, nil
+}
+
+// ListRuns returns all persisted benchmark runs ordered by most recent first.
+func (s *Store) ListRuns() ([]model.Run, error) {
+	rows, err := s.db.Query(`
+		SELECT id, started_at, finished_at, status, scenario_ids, runtime, runtime_kind,
+			endpoint, model, model_file, quant, quant_tier, quant_source, context_size,
+			harness, gpu_backend, gpu_model, gpu_count, vram_total_mb, host_thermal_note,
+			total_points, max_points, report_path, error
+		FROM runs
+		ORDER BY started_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list runs: %w", err)
+	}
+	defer rows.Close()
+
+	var runs []model.Run
+	for rows.Next() {
+		var r model.Run
+		var finishedAt sql.NullInt64
+		var totalPoints, maxPoints sql.NullInt64
+		var scenarioIDs string
+		var endpoint, modelFile, quant, quantSource, harness, gpuBackend, gpuModel, hostThermal, reportPath, errMsg sql.NullString
+		var quantTier sql.NullFloat64
+		var contextSize, gpuCount, vramTotal sql.NullInt64
+		if err := rows.Scan(
+			&r.ID, &r.StartedAt, &finishedAt, &r.Status, &scenarioIDs, &r.Runtime, &r.RuntimeKind,
+			&endpoint, &r.Model, &modelFile, &quant, &quantTier, &quantSource, &contextSize,
+			&harness, &gpuBackend, &gpuModel, &gpuCount, &vramTotal, &hostThermal,
+			&totalPoints, &maxPoints, &reportPath, &errMsg,
+		); err != nil {
+			return nil, fmt.Errorf("scan run: %w", err)
+		}
+		if finishedAt.Valid {
+			r.FinishedAt = &finishedAt.Int64
+		}
+		if totalPoints.Valid {
+			v := int(totalPoints.Int64)
+			r.TotalPoints = &v
+		}
+		if maxPoints.Valid {
+			v := int(maxPoints.Int64)
+			r.MaxPoints = &v
+		}
+		if contextSize.Valid {
+			v := int(contextSize.Int64)
+			r.ContextSize = &v
+		}
+		if gpuCount.Valid {
+			v := int(gpuCount.Int64)
+			r.GPUCount = &v
+		}
+		if vramTotal.Valid {
+			v := int(vramTotal.Int64)
+			r.VRAMTotalMB = &v
+		}
+		if quantTier.Valid {
+			r.QuantTier = &quantTier.Float64
+		}
+		r.Endpoint = endpoint.String
+		r.ModelFile = modelFile.String
+		r.Quant = quant.String
+		r.QuantSource = quantSource.String
+		r.Harness = harness.String
+		r.GPUBackend = gpuBackend.String
+		r.GPUModel = gpuModel.String
+		r.HostThermalNote = hostThermal.String
+		r.ReportPath = reportPath.String
+		r.Error = errMsg.String
+		_ = json.Unmarshal([]byte(scenarioIDs), &r.ScenarioIDs)
+		runs = append(runs, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate runs: %w", err)
+	}
+	return runs, nil
+}
+
+// GetRunWithScenarios returns a run by ID along with its scenario runs.
+func (s *Store) GetRunWithScenarios(id string) (model.Run, []model.ScenarioRun, error) {
+	r, err := s.GetRun(id)
+	if err != nil {
+		return model.Run{}, nil, err
+	}
+
+	rows, err := s.db.Query(`
+		SELECT run_id, scenario_id, category, family, started_at, finished_at, status,
+			points, max_points, rubric_kind, correctness, scope, pattern, verification, cleanup,
+			wall_time_ms, first_token_ms, tool_call_count, bash_calls, post_change_bash_calls,
+			verify_passes, mutated, model_metrics_json, evaluation_json, error_kind, error, artifact_path
+		FROM scenario_runs
+		WHERE run_id = ?
+		ORDER BY started_at ASC
+	`, id)
+	if err != nil {
+		return model.Run{}, nil, fmt.Errorf("query scenarios: %w", err)
+	}
+	defer rows.Close()
+
+	var scenarios []model.ScenarioRun
+	for rows.Next() {
+		var sr model.ScenarioRun
+		var startedAt, finishedAt, wallTimeMs, firstTokenMs sql.NullInt64
+		var points, correctness, scope, pattern, verification, cleanup, maxPoints sql.NullInt64
+		var toolCallCount, bashCalls, postChangeBashCalls, verifyPasses sql.NullInt64
+		var category, family, rubricKind, modelMetricsJSON, evaluationJSON, errorKind, errorMsg, artifactPath sql.NullString
+		var mutated sql.NullBool
+		if err := rows.Scan(
+			&sr.RunID, &sr.ScenarioID, &category, &family, &startedAt, &finishedAt, &sr.Status,
+			&points, &maxPoints, &rubricKind, &correctness, &scope, &pattern, &verification, &cleanup,
+			&wallTimeMs, &firstTokenMs, &toolCallCount, &bashCalls, &postChangeBashCalls, &verifyPasses,
+			&mutated, &modelMetricsJSON, &evaluationJSON, &errorKind, &errorMsg, &artifactPath,
+		); err != nil {
+			return model.Run{}, nil, fmt.Errorf("scan scenario run: %w", err)
+		}
+		if startedAt.Valid {
+			sr.StartedAt = &startedAt.Int64
+		}
+		if finishedAt.Valid {
+			sr.FinishedAt = &finishedAt.Int64
+		}
+		if points.Valid {
+			v := int(points.Int64)
+			sr.Points = &v
+		}
+		if maxPoints.Valid {
+			sr.MaxPoints = int(maxPoints.Int64)
+		}
+		if correctness.Valid {
+			v := int(correctness.Int64)
+			sr.Correctness = &v
+		}
+		if scope.Valid {
+			v := int(scope.Int64)
+			sr.Scope = &v
+		}
+		if pattern.Valid {
+			v := int(pattern.Int64)
+			sr.Pattern = &v
+		}
+		if verification.Valid {
+			v := int(verification.Int64)
+			sr.Verification = &v
+		}
+		if cleanup.Valid {
+			v := int(cleanup.Int64)
+			sr.Cleanup = &v
+		}
+		if wallTimeMs.Valid {
+			sr.WallTimeMs = &wallTimeMs.Int64
+		}
+		if firstTokenMs.Valid {
+			sr.FirstTokenMs = &firstTokenMs.Int64
+		}
+		if toolCallCount.Valid {
+			v := int(toolCallCount.Int64)
+			sr.ToolCallCount = &v
+		}
+		if bashCalls.Valid {
+			v := int(bashCalls.Int64)
+			sr.BashCalls = &v
+		}
+		if postChangeBashCalls.Valid {
+			v := int(postChangeBashCalls.Int64)
+			sr.PostChangeBashCalls = &v
+		}
+		if verifyPasses.Valid {
+			v := int(verifyPasses.Int64)
+			sr.VerifyPasses = &v
+		}
+		if mutated.Valid {
+			v := mutated.Bool
+			sr.Mutated = &v
+		}
+		sr.Category = category.String
+		sr.Family = family.String
+		sr.RubricKind = rubricKind.String
+		sr.ModelMetricsJSON = modelMetricsJSON.String
+		sr.EvaluationJSON = evaluationJSON.String
+		sr.ErrorKind = errorKind.String
+		sr.Error = errorMsg.String
+		sr.ArtifactPath = artifactPath.String
+		scenarios = append(scenarios, sr)
+	}
+	if err := rows.Err(); err != nil {
+		return model.Run{}, nil, fmt.Errorf("iterate scenarios: %w", err)
+	}
+	return r, scenarios, nil
+}
+
+func parseInt(s string) int {
+	v, _ := strconv.Atoi(strings.TrimSpace(s))
+	return v
 }
 
 // InsertRun persists a new benchmark run.

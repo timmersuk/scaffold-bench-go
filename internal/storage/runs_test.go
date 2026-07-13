@@ -2,6 +2,7 @@ package storage
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/timmersuk/scaffold-bench-go/internal/model"
@@ -53,6 +54,103 @@ func TestRunLifecycle(t *testing.T) {
 		t.Fatalf("insert event: %v", err)
 	}
 }
+
+func TestListRuns(t *testing.T) {
+	dir := t.TempDir()
+	store, err := Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	for _, id := range []string{"run-a", "run-b"} {
+		if err := store.InsertRun(model.Run{
+			ID:          id,
+			StartedAt:   int64(strings.Compare(id, "run-a")+1) * 100,
+			Status:      model.RunDone,
+			ScenarioIDs: []string{"demo"},
+			Runtime:     "local",
+			RuntimeKind: "llama.cpp",
+			Model:       "test-model",
+			TotalPoints: intPtr(5),
+			MaxPoints:   intPtr(10),
+		}); err != nil {
+			t.Fatalf("insert %s: %v", id, err)
+		}
+	}
+
+	runs, err := store.ListRuns()
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("expected 2 runs, got %d", len(runs))
+	}
+	// Most recent first: run-b started at 200, run-a at 100.
+	if runs[0].ID != "run-b" || runs[1].ID != "run-a" {
+		t.Errorf("unexpected order: %q, %q", runs[0].ID, runs[1].ID)
+	}
+	if runs[0].TotalPoints == nil || *runs[0].TotalPoints != 5 {
+		t.Errorf("run-b total points = %v, want 5", runs[0].TotalPoints)
+	}
+}
+
+func TestGetRunWithScenarios(t *testing.T) {
+	dir := t.TempDir()
+	store, err := Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	if err := store.InsertRun(model.Run{
+		ID:          "run-1",
+		StartedAt:   1,
+		Status:      model.RunDone,
+		ScenarioIDs: []string{"demo"},
+		Runtime:     "local",
+		RuntimeKind: "llama.cpp",
+		Model:       "test-model",
+		TotalPoints: intPtr(5),
+		MaxPoints:   intPtr(10),
+	}); err != nil {
+		t.Fatalf("insert run: %v", err)
+	}
+
+	if err := store.UpsertScenarioRun(model.ScenarioRun{
+		RunID:      "run-1",
+		ScenarioID: "demo",
+		Category:   "basic",
+		Status:     model.ScenarioPass,
+		Points:     intPtr(5),
+		MaxPoints:  10,
+		RubricKind: "10pt",
+	}); err != nil {
+		t.Fatalf("upsert scenario: %v", err)
+	}
+
+	_, scenarios, err := store.GetRunWithScenarios("run-1")
+	if err != nil {
+		t.Fatalf("get run with scenarios: %v", err)
+	}
+	if len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(scenarios))
+	}
+	if scenarios[0].ScenarioID != "demo" {
+		t.Errorf("scenario id = %q, want demo", scenarios[0].ScenarioID)
+	}
+	if scenarios[0].Points == nil || *scenarios[0].Points != 5 {
+		t.Errorf("scenario points = %v, want 5", scenarios[0].Points)
+	}
+}
+
+func intPtr(v int) *int { return &v }
 
 func TestListEvents(t *testing.T) {
 	dir := t.TempDir()

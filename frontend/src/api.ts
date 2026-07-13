@@ -4,6 +4,7 @@ import type {
   OneshotLatestRun,
   OneshotTestSummary,
   ReportData,
+  RunDetail,
   RunSummary,
   ScenarioInfo,
 } from "./types";
@@ -39,6 +40,7 @@ export const api = {
   getScenarios: (signal?: AbortSignal) => get<ScenarioInfo[]>("/scenarios", signal),
   getModels: (signal?: AbortSignal) => get<ModelsResponse>("/models", signal),
   listRuns: (signal?: AbortSignal) => get<RunSummary[]>("/runs", signal),
+  getRun: (id: string, signal?: AbortSignal) => get<RunDetail>(`/runs/${id}`, signal),
   activeRun: (signal?: AbortSignal) => get<{ runId: string | null }>("/runs/active", signal),
   createRun: (body: {
     scenarioIds: string[];
