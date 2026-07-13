@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/timmersuk/scaffold-bench-go/internal/config"
+	"github.com/timmersuk/scaffold-bench-go/internal/model"
 	"github.com/timmersuk/scaffold-bench-go/internal/realtime"
 	"github.com/timmersuk/scaffold-bench-go/internal/runner"
 	"github.com/timmersuk/scaffold-bench-go/internal/storage"
@@ -75,7 +77,7 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	apiMux.HandleFunc("/models", srv.withMethod(http.MethodGet, srv.handleModels))
 	apiMux.HandleFunc("/runs/active", srv.withMethod(http.MethodGet, srv.handleActiveRun))
 	apiMux.HandleFunc("/runs/clear", srv.withMethod(http.MethodPost, srv.handleClearRuns))
-	apiMux.HandleFunc("/runs", srv.withMethod(http.MethodPost, srv.handleStartRun))
+	apiMux.HandleFunc("/runs", srv.handleRuns)
 	apiMux.HandleFunc("/runs/", srv.handleRuns)
 	apiMux.HandleFunc("/oneshot/tests", srv.withMethod(http.MethodGet, srv.handleOneshotTests))
 	apiMux.HandleFunc("/oneshot/runs/", srv.withMethod(http.MethodGet, srv.handleOneshotRuns))
@@ -163,7 +165,22 @@ func (s *server) handleClearRuns(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleRuns(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(r.URL.Path, "/")
 	parts := strings.Split(path, "/")
-	// parts: ["runs", "id", ...]
+
+	// /api/runs (collection)
+	if len(parts) == 1 {
+		switch r.Method {
+		case http.MethodGet:
+			s.handleListRuns(w, r)
+		case http.MethodPost:
+			s.handleStartRun(w, r)
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		}
+		return
+	}
+
+	// parts: ["runs", id, ...]
 	if len(parts) < 2 {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "missing run id"})
 		return
@@ -211,7 +228,7 @@ func (s *server) handleRuns(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"id": runID})
+		s.handleGetRun(w, r, runID)
 		return
 	}
 
@@ -318,6 +335,72 @@ func (s *server) handleRunEvents(w http.ResponseWriter, r *http.Request, runID s
 		return
 	}
 	writeJSON(w, http.StatusOK, events)
+}
+
+func (s *server) handleListRuns(w http.ResponseWriter, r *http.Request) {
+	runs, err := s.store.ListRuns()
+	if err != nil {
+		slog.Error("list runs", "err", err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to list runs"})
+		return
+	}
+	resp := make([]runSummary, 0, len(runs))
+	for _, run := range runs {
+		resp = append(resp, runSummary{
+			ID:          run.ID,
+			StartedAt:   run.StartedAt,
+			FinishedAt:  run.FinishedAt,
+			Status:      string(run.Status),
+			Model:       run.Model,
+			TotalPoints: zeroIfNil(run.TotalPoints),
+			MaxPoints:   zeroIfNil(run.MaxPoints),
+		})
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *server) handleGetRun(w http.ResponseWriter, r *http.Request, runID string) {
+	run, scenarios, err := s.store.GetRunWithScenarios(runID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, http.StatusNotFound, errorResponse{Error: "run not found"})
+			return
+		}
+		slog.Error("get run with scenarios", "run_id", runID, "err", err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to get run"})
+		return
+	}
+
+	scenarioInfos := make([]scenarioResult, 0, len(scenarios))
+	for _, sr := range scenarios {
+		scenarioInfos = append(scenarioInfos, scenarioResult{
+			ScenarioID:    sr.ScenarioID,
+			Category:      sr.Category,
+			Family:        sr.Family,
+			Status:        string(sr.Status),
+			Points:        zeroIfNil(sr.Points),
+			MaxPoints:     sr.MaxPoints,
+			WallTimeMs:    sr.WallTimeMs,
+			FirstTokenMs:  sr.FirstTokenMs,
+			ToolCallCount: zeroIfNil(sr.ToolCallCount),
+			ModelMetrics:  jsonRaw(sr.ModelMetricsJSON),
+			Evaluation:    jsonRaw(sr.EvaluationJSON),
+			RubricKind:    sr.RubricKind,
+			Breakdown:     breakdown(&sr),
+			Error:         sr.Error,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, runDetail{
+		ID:          run.ID,
+		StartedAt:   run.StartedAt,
+		FinishedAt:  run.FinishedAt,
+		Status:      string(run.Status),
+		Model:       run.Model,
+		TotalPoints: zeroIfNil(run.TotalPoints),
+		MaxPoints:   zeroIfNil(run.MaxPoints),
+		Scenarios:   scenarioInfos,
+	})
 }
 
 func (s *server) handleOneshotTests(w http.ResponseWriter, r *http.Request) {
@@ -458,6 +541,72 @@ func (s *server) discoverLocalModels(ctx context.Context) []modelInfo {
 
 type errorResponse struct {
 	Error string `json:"error"`
+}
+
+type runSummary struct {
+	ID          string `json:"id"`
+	StartedAt   int64  `json:"startedAt"`
+	FinishedAt  *int64 `json:"finishedAt,omitempty"`
+	Status      string `json:"status"`
+	Model       string `json:"model"`
+	TotalPoints int    `json:"totalPoints"`
+	MaxPoints   int    `json:"maxPoints"`
+}
+
+type runDetail struct {
+	ID          string           `json:"id"`
+	StartedAt   int64            `json:"startedAt"`
+	FinishedAt  *int64           `json:"finishedAt,omitempty"`
+	Status      string           `json:"status"`
+	Model       string           `json:"model"`
+	TotalPoints int              `json:"totalPoints"`
+	MaxPoints   int              `json:"maxPoints"`
+	Scenarios   []scenarioResult `json:"scenarios"`
+}
+
+type scenarioResult struct {
+	ScenarioID    string `json:"scenarioId"`
+	Category      string `json:"category,omitempty"`
+	Family        string `json:"family,omitempty"`
+	Status        string `json:"status"`
+	Points        int    `json:"points"`
+	MaxPoints     int    `json:"maxPoints"`
+	WallTimeMs    *int64 `json:"wallTimeMs,omitempty"`
+	FirstTokenMs  *int64 `json:"firstTokenMs,omitempty"`
+	ToolCallCount int    `json:"toolCallCount"`
+	ModelMetrics  any    `json:"modelMetrics,omitempty"`
+	Evaluation    any    `json:"evaluation,omitempty"`
+	RubricKind    string `json:"rubricKind,omitempty"`
+	Breakdown     any    `json:"breakdown,omitempty"`
+	Error         string `json:"error,omitempty"`
+}
+
+func zeroIfNil(v *int) int {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+func jsonRaw(s string) any {
+	if s == "" {
+		return nil
+	}
+	var v any
+	if err := json.Unmarshal([]byte(s), &v); err != nil {
+		return nil
+	}
+	return v
+}
+
+func breakdown(sr *model.ScenarioRun) any {
+	return map[string]any{
+		"correctness":  zeroIfNil(sr.Correctness),
+		"scope":        zeroIfNil(sr.Scope),
+		"pattern":      zeroIfNil(sr.Pattern),
+		"verification": zeroIfNil(sr.Verification),
+		"cleanup":      zeroIfNil(sr.Cleanup),
+	}
 }
 
 func (s *server) withMethod(method string, next http.HandlerFunc) http.HandlerFunc {

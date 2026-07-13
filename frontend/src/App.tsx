@@ -1,21 +1,37 @@
 import { useEffect, useState } from "react";
 import { LayoutDashboard, History, FlaskConical } from "lucide-react";
 import { Dashboard } from "./views/Dashboard";
+import { RunHistory } from "./views/RunHistory";
+import { RunDetailView } from "./views/RunDetailView";
 import { StartRunModal } from "./components/StartRunModal";
 import { ToastProvider } from "./components/Toaster";
 
-type View = { name: "dashboard" } | { name: "history" } | { name: "oneshot" };
+type View =
+  | { name: "dashboard" }
+  | { name: "history" }
+  | { name: "oneshot" }
+  | { name: "run"; runId: string };
 
 function parseView(): View {
   const params = new URLSearchParams(window.location.search);
   const name = params.get("view") ?? "dashboard";
-  if (name === "history" || name === "oneshot") return { name };
+  if (name === "history") return { name: "history" };
+  if (name === "oneshot") return { name: "oneshot" };
+  if (name === "run") {
+    const runId = params.get("runId");
+    if (runId) return { name: "run", runId };
+  }
   return { name: "dashboard" };
 }
 
 function setView(view: View) {
   const params = new URLSearchParams(window.location.search);
   params.set("view", view.name);
+  if (view.name === "run") {
+    params.set("runId", view.runId);
+  } else {
+    params.delete("runId");
+  }
   window.history.pushState(null, "", `?${params.toString()}`);
 }
 
@@ -68,7 +84,13 @@ export default function App() {
               startingRunId={startingRunId}
             />
           )}
-          {view.name === "history" && <RunHistory onBack={() => navigate({ name: "dashboard" })} />}
+          {view.name === "history" && (
+            <RunHistory
+              onBack={() => navigate({ name: "dashboard" })}
+              onOpenRun={(runId) => navigate({ name: "run", runId })}
+            />
+          )}
+          {view.name === "run" && <RunDetailView runId={view.runId} onBack={() => navigate({ name: "history" })} />}
           {view.name === "oneshot" && <OneShotLab onBack={() => navigate({ name: "dashboard" })} />}
         </main>
       </div>
@@ -107,22 +129,6 @@ function NavButton({
       {icon}
       {children}
     </button>
-  );
-}
-
-function RunHistory({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="space-y-6">
-      <div className="rounded-xl border bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Run History</h2>
-          <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
-            Back to Dashboard
-          </button>
-        </div>
-        <p className="mt-2 text-gray-600">Leaderboard and past runs will appear here.</p>
-      </div>
-    </div>
   );
 }
 

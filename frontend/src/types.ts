@@ -30,6 +30,40 @@ export interface RunSummary {
   maxPoints: number;
 }
 
+export interface RunDetail {
+  id: string;
+  startedAt: number;
+  finishedAt?: number;
+  status: string;
+  model: string;
+  totalPoints: number;
+  maxPoints: number;
+  scenarios: ScenarioResult[];
+}
+
+export interface ScenarioResult {
+  scenarioId: string;
+  category?: string;
+  family?: string;
+  status: "pass" | "partial" | "fail" | "stopped" | "skipped";
+  points: number;
+  maxPoints: number;
+  wallTimeMs?: number;
+  firstTokenMs?: number;
+  toolCallCount: number;
+  modelMetrics?: ModelMetrics;
+  evaluation?: ScenarioEvaluation;
+  rubricKind?: string;
+  breakdown?: {
+    correctness: number;
+    scope: number;
+    pattern: number;
+    verification: number;
+    cleanup: number;
+  };
+  error?: string;
+}
+
 export interface ReportData {
   models: unknown[];
   categories: unknown[];
