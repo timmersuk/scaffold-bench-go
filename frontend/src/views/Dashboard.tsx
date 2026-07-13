@@ -142,8 +142,7 @@ export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardPro
       open();
     } else {
       setConnectionState("idle");
-      dispatch({ type: "_reset" });
-      lastSeqRef.current = -1;
+      // Keep the last run state visible; only reset when a new run starts.
     }
 
     return () => {
