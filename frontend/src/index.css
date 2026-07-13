@@ -1,4 +1,6 @@
-/* App-specific styles. Tailwind CSS is imported in main.tsx. */
+@import "tailwindcss";
+
+/* App-specific styles. */
 
 body {
   margin: 0;
