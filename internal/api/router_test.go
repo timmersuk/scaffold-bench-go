@@ -469,6 +469,73 @@ func TestRunEventsEndpointReturnsPersistedEvents(t *testing.T) {
 	}
 }
 
+func TestModelsEndpointIncludesDisplayNames(t *testing.T) {
+	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"id": "local-model-a", "object": "model"},
+				{"id": "Local Model B", "object": "model"},
+				{"id": "alreadyfriend", "object": "model"},
+			},
+		})
+	}))
+	defer local.Close()
+
+	store, events, registry, fr := testDependencies(t)
+	router, err := NewRouter(Config{
+		Store:    store,
+		Events:   events,
+		Runner:   fr,
+		Registry: registry,
+		AppConfig: config.Config{
+			LocalEndpoint:  local.URL,
+			RemoteEndpoint: "https://api.remote.example.com",
+			RemoteModels:   []string{"remote-model-1", "Friendly Remote"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/models", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp modelsResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	wantDisplay := map[string]string{
+		"local-model-a":   "Local Model A",
+		"Local Model B":   "",
+		"alreadyfriend":   "Alreadyfriend",
+		"remote-model-1":  "Remote Model 1",
+		"Friendly Remote": "",
+	}
+	for _, m := range append(resp.Local, resp.Remote...) {
+		want, ok := wantDisplay[m.ID]
+		if !ok {
+			continue
+		}
+		if m.DisplayName != want {
+			t.Errorf("model %q displayName = %q, want %q", m.ID, m.DisplayName, want)
+		}
+		delete(wantDisplay, m.ID)
+	}
+	for id := range wantDisplay {
+		t.Errorf("expected model %q in response", id)
+	}
+}
+
 func TestModelsEndpointReturnsRemoteWhenLocalUnreachable(t *testing.T) {
 	store, events, registry, fr := testDependencies(t)
 	router, err := NewRouter(Config{

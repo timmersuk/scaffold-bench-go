@@ -184,7 +184,7 @@ export function StartRunModal({ onClose, onLaunch }: StartRunModalProps) {
                     <optgroup label="Local">
                       {models.local.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.id}
+                          {m.displayName ?? m.id}
                         </option>
                       ))}
                     </optgroup>
@@ -193,7 +193,7 @@ export function StartRunModal({ onClose, onLaunch }: StartRunModalProps) {
                     <optgroup label="Remote">
                       {models.remote.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.id}
+                          {m.displayName ?? m.id}
                         </option>
                       ))}
                     </optgroup>
