@@ -22,9 +22,10 @@ const POLL_MS = 5000;
 interface DashboardProps {
   onStartRun: () => void;
   onHistory: () => void;
+  startingRunId?: string | null;
 }
 
-export function Dashboard({ onStartRun, onHistory }: DashboardProps) {
+export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardProps) {
   const [state, dispatch] = useReducer(reducer, INITIAL_REDUCER_STATE);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<"idle" | "connecting" | "open" | "error">("idle");
@@ -48,7 +49,7 @@ export function Dashboard({ onStartRun, onHistory }: DashboardProps) {
 
     const tick = async () => {
       try {
-        const health = await fetch("/api/health");
+        const health = await fetch("/health");
         if (cancelled) return;
         setHealthStatus(health.ok ? "ok" : "error");
       } catch {
@@ -152,6 +153,17 @@ export function Dashboard({ onStartRun, onHistory }: DashboardProps) {
     };
   }, [activeRunId, dispatchEvent, pushToast]);
 
+  const lastStartingRunId = useRef<string | null>(null);
+
+  // If App tells us a run is starting, immediately treat it as the active run
+  // so we open the stream without waiting for the next poll.
+  useEffect(() => {
+    if (startingRunId && startingRunId !== lastStartingRunId.current && activeRunId === null) {
+      lastStartingRunId.current = startingRunId;
+      setActiveRunId(startingRunId);
+    }
+  }, [startingRunId, activeRunId]);
+
   const handleStart = () => {
     onStartRun();
   };
@@ -162,6 +174,9 @@ export function Dashboard({ onStartRun, onHistory }: DashboardProps) {
       pushToast(err instanceof Error ? err.message : "Failed to stop run", "error");
     });
   };
+
+  const isStarting =
+    startingRunId != null && state.runId === null && state.status === "idle";
 
   const elapsed =
     state.status === "running" && state.startedAt
@@ -190,7 +205,23 @@ export function Dashboard({ onStartRun, onHistory }: DashboardProps) {
         onHistory={onHistory}
       />
 
-      {activeRunId === null && state.status === "idle" ? (
+      {isStarting ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+          <div className="text-center">
+            <div className="mx-auto mb-4 w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <h3 className="text-xl font-semibold text-gray-900">Run starting…</h3>
+            <p className="mt-2 text-gray-600 max-w-md">
+              Connecting to the live stream for run <code className="text-xs bg-gray-100 px-1 rounded">{startingRunId}</code>.
+            </p>
+          </div>
+          <button
+            onClick={handleStart}
+            className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-md font-medium hover:bg-gray-50 transition-colors"
+          >
+            Start another run
+          </button>
+        </div>
+      ) : activeRunId === null && state.status === "idle" ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
           <div className="text-center">
             <h3 className="text-xl font-semibold text-gray-900">No active benchmark run</h3>
