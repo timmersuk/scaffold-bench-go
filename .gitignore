@@ -27,3 +27,8 @@ frontend/package-lock.json
 Thumbs.db
 *.exe
 
+# Local tooling / snapshots
+.snapshots/
+snapshots/
+.playwright-cli/
+
