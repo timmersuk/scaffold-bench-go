@@ -18,6 +18,7 @@ export interface Model {
   source: "local" | "remote";
   endpoint: string;
   requiresApiKey?: boolean;
+  displayName?: string;
 }
 
 export interface RunSummary {

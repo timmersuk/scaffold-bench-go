@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/timmersuk/scaffold-bench-go/internal/config"
 	"github.com/timmersuk/scaffold-bench-go/internal/model"
@@ -479,6 +480,7 @@ type modelInfo struct {
 	Source         string `json:"source"`
 	Endpoint       string `json:"endpoint"`
 	RequiresAPIKey bool   `json:"requiresApiKey,omitempty"`
+	DisplayName    string `json:"displayName,omitempty"`
 }
 
 type modelListKey struct {
@@ -578,6 +580,7 @@ func (s *server) discoverRemoteModels(ctx context.Context) []modelInfo {
 			Source:         "remote",
 			Endpoint:       endpoint,
 			RequiresAPIKey: s.appConfig.RemoteAPIKey == "",
+			DisplayName:    displayNameForModel(m.ID, m.Object),
 		})
 	}
 
@@ -592,6 +595,7 @@ func (s *server) discoverRemoteModels(ctx context.Context) []modelInfo {
 			Source:         "remote",
 			Endpoint:       endpoint,
 			RequiresAPIKey: s.appConfig.RemoteAPIKey == "",
+			DisplayName:    displayNameForModel(id, ""),
 		})
 	}
 
@@ -608,9 +612,51 @@ func (s *server) staticRemoteModels() []modelInfo {
 			Source:         "remote",
 			Endpoint:       endpoint,
 			RequiresAPIKey: s.appConfig.RemoteAPIKey == "",
+			DisplayName:    displayNameForModel(id, ""),
 		})
 	}
 	return models
+}
+
+func displayNameForModel(id, object string) string {
+	// Some providers include a human-readable name in the object field.
+	// Prefer it only when it is a real name and not the OpenAI generic "model" marker.
+	if object != "" && object != id && object != "model" {
+		return object
+	}
+	return deriveDisplayNameFromID(id)
+}
+
+func deriveDisplayNameFromID(id string) string {
+	// Replace common separators with spaces and title-case each word.
+	separators := []string{"-", "_", "."}
+	name := id
+	for _, sep := range separators {
+		name = strings.ReplaceAll(name, sep, " ")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	words := strings.Fields(name)
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		runes := []rune(w)
+		if len(runes) > 0 {
+			runes[0] = unicode.ToTitle(runes[0])
+			for j := 1; j < len(runes); j++ {
+				runes[j] = unicode.ToLower(runes[j])
+			}
+			words[i] = string(runes)
+		}
+	}
+	derived := strings.Join(words, " ")
+	if derived == id {
+		return ""
+	}
+	return derived
 }
 
 type openAIModelsResponse struct {
@@ -618,7 +664,8 @@ type openAIModelsResponse struct {
 }
 
 type openAIModel struct {
-	ID string `json:"id"`
+	ID     string `json:"id"`
+	Object string `json:"object"`
 }
 
 func (s *server) discoverLocalModels(ctx context.Context) []modelInfo {
@@ -660,9 +707,10 @@ func (s *server) discoverLocalModels(ctx context.Context) []modelInfo {
 			continue
 		}
 		models = append(models, modelInfo{
-			ID:       m.ID,
-			Source:   "local",
-			Endpoint: endpoint,
+			ID:          m.ID,
+			Source:      "local",
+			Endpoint:    endpoint,
+			DisplayName: displayNameForModel(m.ID, m.Object),
 		})
 	}
 	return models
