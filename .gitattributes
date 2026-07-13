@@ -1,3 +1,6 @@
+# Force LF for all text files so Windows checkouts don't cause spurious whole-file diffs.
+* text=auto eol=lf
+
 # Keep scenario fixture files as LF so Windows checkouts don't break
 # diff-based scope checks or function/pattern comparisons against pristine copies.
 scenarios/** text eol=lf

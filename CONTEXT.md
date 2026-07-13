@@ -61,7 +61,9 @@ The server-sent event feed that emits a Run's events in real time, available at 
 **Run Event**:
 A persisted, sequenced message emitted by the runner during a Run. Examples include `run_started`, `scenario_started`, `assistant_delta`, and `scenario_finished`.
 
-**Scenario Result**:
+**Runtime Configuration**:
+Configuration persisted in the data folder and editable at runtime, restricted to model endpoints (`LocalEndpoint`, `RemoteEndpoint`, `RemoteAPIKey`) and the remote model list (`RemoteModels`). Changes are blocked while a Run is **Active**; `HTTPAddr`, `DBPath`, and `DataDir` remain environment-only configuration.
+_Avoid_: Settings, preferences.
 The outcome of an individual Scenario within a Run, including its status (`pass`, `partial`, `fail`, `stopped`, `skipped`), points, and evaluation details.
 
 **Dashboard**:
