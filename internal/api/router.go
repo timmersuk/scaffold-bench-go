@@ -65,13 +65,13 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	}
 
 	srv := &server{
-		store:       cfg.Store,
-		events:      cfg.Events,
-		runner:      cfg.Runner,
-		registry:    cfg.Registry,
-		appConfig:   cfg.AppConfig,
-		buildID:     cfg.BuildID,
-		frontend:    frontend,
+		store:     cfg.Store,
+		events:    cfg.Events,
+		runner:    cfg.Runner,
+		registry:  cfg.Registry,
+		appConfig: cfg.AppConfig,
+		buildID:   cfg.BuildID,
+		frontend:  frontend,
 		modelsCache: &modelsCache{
 			ttl: cfg.AppConfig.RemoteModelCacheTTLSeconds,
 		},
@@ -535,40 +535,16 @@ func (s *server) discoverRemoteModels(ctx context.Context) []modelInfo {
 		return cached
 	}
 
-	url := endpoint + "/v1/models"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	data, err := s.fetchOpenAIModels(ctx, endpoint, s.appConfig.RemoteAPIKey)
 	if err != nil {
-		slog.Error("build remote models request", "err", err)
-		return s.staticRemoteModels()
-	}
-	req.Header.Set("Accept", "application/json")
-	if s.appConfig.RemoteAPIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+s.appConfig.RemoteAPIKey)
-	}
-
-	client := s.httpClient
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Debug("remote models endpoint unreachable", "endpoint", endpoint, "err", err)
-		return s.staticRemoteModels()
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Debug("remote models endpoint returned non-ok status", "status", resp.StatusCode)
+		slog.Debug("remote models endpoint unavailable", "endpoint", endpoint, "err", err)
 		return s.staticRemoteModels()
 	}
 
-	var parsed openAIModelsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		slog.Error("decode remote models response", "err", err)
-		return s.staticRemoteModels()
-	}
+	seen := make(map[modelListKey]struct{}, len(data)+len(s.appConfig.RemoteModels))
+	models := make([]modelInfo, 0, len(data)+len(s.appConfig.RemoteModels))
 
-	seen := make(map[modelListKey]struct{}, len(parsed.Data)+len(s.appConfig.RemoteModels))
-	models := make([]modelInfo, 0, len(parsed.Data)+len(s.appConfig.RemoteModels))
-
-	for _, m := range parsed.Data {
+	for _, m := range data {
 		if m.ID == "" {
 			continue
 		}
@@ -602,6 +578,62 @@ func (s *server) discoverRemoteModels(ctx context.Context) []modelInfo {
 	}
 
 	s.modelsCache.set(models)
+	return models
+}
+
+func (s *server) fetchOpenAIModels(ctx context.Context, endpoint, apiKey string) ([]openAIModel, error) {
+	endpoint = strings.TrimRight(endpoint, "/")
+	url := endpoint + "/v1/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	var parsed openAIModelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return nil, err
+	}
+	return parsed.Data, nil
+}
+
+func (s *server) discoverLocalModels(ctx context.Context) []modelInfo {
+	endpoint := strings.TrimRight(s.appConfig.LocalEndpoint, "/")
+	if endpoint == "" {
+		return []modelInfo{}
+	}
+
+	data, err := s.fetchOpenAIModels(ctx, endpoint, "")
+	if err != nil {
+		slog.Debug("local models endpoint unavailable", "endpoint", endpoint, "err", err)
+		return []modelInfo{}
+	}
+
+	models := make([]modelInfo, 0, len(data))
+	for _, m := range data {
+		if m.ID == "" {
+			continue
+		}
+		models = append(models, modelInfo{
+			ID:          m.ID,
+			Source:      "local",
+			Endpoint:    endpoint,
+			DisplayName: displayNameForModel(m.ID, m.Object),
+		})
+	}
 	return models
 }
 
@@ -668,54 +700,6 @@ type openAIModelsResponse struct {
 type openAIModel struct {
 	ID     string `json:"id"`
 	Object string `json:"object"`
-}
-
-func (s *server) discoverLocalModels(ctx context.Context) []modelInfo {
-	endpoint := strings.TrimRight(s.appConfig.LocalEndpoint, "/")
-	if endpoint == "" {
-		return []modelInfo{}
-	}
-
-	url := endpoint + "/v1/models"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		slog.Error("build local models request", "err", err)
-		return []modelInfo{}
-	}
-	req.Header.Set("Accept", "application/json")
-
-	client := s.httpClient
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Debug("local models endpoint unreachable", "endpoint", endpoint, "err", err)
-		return []modelInfo{}
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Debug("local models endpoint returned non-ok status", "status", resp.StatusCode)
-		return []modelInfo{}
-	}
-
-	var parsed openAIModelsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		slog.Error("decode local models response", "err", err)
-		return []modelInfo{}
-	}
-
-	models := make([]modelInfo, 0, len(parsed.Data))
-	for _, m := range parsed.Data {
-		if m.ID == "" {
-			continue
-		}
-		models = append(models, modelInfo{
-			ID:          m.ID,
-			Source:      "local",
-			Endpoint:    endpoint,
-			DisplayName: displayNameForModel(m.ID, m.Object),
-		})
-	}
-	return models
 }
 
 type errorResponse struct {
