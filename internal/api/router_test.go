@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/timmersuk/scaffold-bench-go/internal/config"
@@ -329,6 +330,126 @@ func TestModelsEndpointRemoteDiscoveryFallsBackToStatic(t *testing.T) {
 	}
 	if resp.Remote[0].ID != "remote-fallback" {
 		t.Errorf("remote model id = %q, want remote-fallback", resp.Remote[0].ID)
+	}
+}
+
+func TestModelsEndpointReusesHTTPClientForLocalDiscovery(t *testing.T) {
+	var mu sync.Mutex
+	addrs := make(map[string]int)
+	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		addrs[r.RemoteAddr]++
+		mu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"id": "local-model-a", "object": "model"},
+				{"id": "local-model-b", "object": "model"},
+			},
+		})
+	}))
+	defer local.Close()
+
+	store, events, registry, fr := testDependencies(t)
+	router, err := NewRouter(Config{
+		Store:    store,
+		Events:   events,
+		Runner:   fr,
+		Registry: registry,
+		AppConfig: config.Config{
+			LocalEndpoint:  local.URL,
+			RemoteEndpoint: "https://api.remote.example.com",
+			RemoteModels:   []string{"remote-model-1"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/api/models", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
+		}
+		var resp modelsResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if len(resp.Local) != 2 {
+			t.Fatalf("expected 2 local models, got %d", len(resp.Local))
+		}
+	}
+
+	mu.Lock()
+	distinct := len(addrs)
+	mu.Unlock()
+	if distinct != 1 {
+		t.Fatalf("expected 1 reused TCP connection, got %d distinct RemoteAddr values", distinct)
+	}
+}
+
+func TestModelsEndpointReusesHTTPClientForRemoteDiscovery(t *testing.T) {
+	var mu sync.Mutex
+	addrs := make(map[string]int)
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		addrs[r.RemoteAddr]++
+		mu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"id": "remote-model-a", "object": "model"},
+			},
+		})
+	}))
+	defer remote.Close()
+
+	store, events, registry, fr := testDependencies(t)
+	router, err := NewRouter(Config{
+		Store:    store,
+		Events:   events,
+		Runner:   fr,
+		Registry: registry,
+		AppConfig: config.Config{
+			LocalEndpoint:              "http://127.0.0.1:1",
+			RemoteEndpoint:             remote.URL,
+			RemoteModels:               []string{"remote-static"},
+			RemoteModelCacheTTLSeconds: 0,
+		},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/api/models", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
+		}
+		var resp modelsResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if len(resp.Remote) != 2 {
+			t.Fatalf("expected 2 remote models, got %d", len(resp.Remote))
+		}
+	}
+
+	mu.Lock()
+	distinct := len(addrs)
+	mu.Unlock()
+	if distinct != 1 {
+		t.Fatalf("expected 1 reused TCP connection, got %d distinct RemoteAddr values", distinct)
 	}
 }
 
