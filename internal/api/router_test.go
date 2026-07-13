@@ -380,3 +380,125 @@ func TestModelsEndpointRemoteDoesNotRequireKeyWhenConfigured(t *testing.T) {
 		t.Errorf("remote model should not require API key when configured")
 	}
 }
+
+func TestListRunsEndpointReturnsRuns(t *testing.T) {
+	store, events, registry, fr := testDependencies(t)
+	router, err := NewRouter(Config{
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{LocalEndpoint: "http://127.0.0.1:1"},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	if err := store.InsertRun(model.Run{
+		ID:          "run-1",
+		StartedAt:   1,
+		Status:      model.RunDone,
+		ScenarioIDs: []string{"demo"},
+		Runtime:     "local",
+		RuntimeKind: "llama.cpp",
+		Model:       "test-model",
+		TotalPoints: intPtr(5),
+		MaxPoints:   intPtr(10),
+	}); err != nil {
+		t.Fatalf("insert run: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/runs", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp []map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(resp))
+	}
+	if resp[0]["id"] != "run-1" {
+		t.Errorf("run id = %v, want run-1", resp[0]["id"])
+	}
+	if resp[0]["status"] != "done" {
+		t.Errorf("run status = %v, want done", resp[0]["status"])
+	}
+	if resp[0]["totalPoints"] != float64(5) {
+		t.Errorf("run totalPoints = %v, want 5", resp[0]["totalPoints"])
+	}
+}
+
+func TestGetRunEndpointReturnsRunWithScenarios(t *testing.T) {
+	store, events, registry, fr := testDependencies(t)
+	router, err := NewRouter(Config{
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{LocalEndpoint: "http://127.0.0.1:1"},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	if err := store.InsertRun(model.Run{
+		ID:          "run-1",
+		StartedAt:   1,
+		Status:      model.RunDone,
+		ScenarioIDs: []string{"demo"},
+		Runtime:     "local",
+		RuntimeKind: "llama.cpp",
+		Model:       "test-model",
+		TotalPoints: intPtr(5),
+		MaxPoints:   intPtr(10),
+	}); err != nil {
+		t.Fatalf("insert run: %v", err)
+	}
+	if err := store.UpsertScenarioRun(model.ScenarioRun{
+		RunID:      "run-1",
+		ScenarioID: "demo",
+		Category:   "basic",
+		Status:     model.ScenarioPass,
+		Points:     intPtr(5),
+		MaxPoints:  10,
+		RubricKind: "10pt",
+	}); err != nil {
+		t.Fatalf("upsert scenario: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/runs/run-1", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["id"] != "run-1" {
+		t.Errorf("run id = %v, want run-1", resp["id"])
+	}
+	scenarios, ok := resp["scenarios"].([]any)
+	if !ok || len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %v", resp["scenarios"])
+	}
+	scenario := scenarios[0].(map[string]any)
+	if scenario["scenarioId"] != "demo" {
+		t.Errorf("scenario id = %v, want demo", scenario["scenarioId"])
+	}
+	if scenario["points"] != float64(5) {
+		t.Errorf("scenario points = %v, want 5", scenario["points"])
+	}
+}
+
+func intPtr(v int) *int { return &v }
+
