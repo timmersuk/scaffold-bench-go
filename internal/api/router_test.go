@@ -158,6 +158,180 @@ func TestScenariosEndpointReturnsDemo(t *testing.T) {
 	}
 }
 
+func TestModelsEndpointDiscoversRemoteModels(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer secret" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"id": "remote-discovered-a", "object": "model"},
+				{"id": "remote-discovered-b", "object": "model"},
+			},
+		})
+	}))
+	defer remote.Close()
+
+	store, events, registry, fr := testDependencies(t)
+	router, err := NewRouter(Config{
+		Store:    store,
+		Events:   events,
+		Runner:   fr,
+		Registry: registry,
+		AppConfig: config.Config{
+			LocalEndpoint:              "http://127.0.0.1:1",
+			RemoteEndpoint:             remote.URL,
+			RemoteAPIKey:               "secret",
+			RemoteModels:               []string{"remote-static"},
+			RemoteModelCacheTTLSeconds: 10,
+		},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/models", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp modelsResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if len(resp.Local) != 0 {
+		t.Errorf("expected 0 local models, got %d", len(resp.Local))
+	}
+	if len(resp.Remote) != 3 {
+		t.Fatalf("expected 3 remote models, got %d: %v", len(resp.Remote), resp.Remote)
+	}
+
+	ids := make([]string, len(resp.Remote))
+	for i, m := range resp.Remote {
+		ids[i] = m.ID
+		if m.Source != "remote" {
+			t.Errorf("model %q source = %q, want remote", m.ID, m.Source)
+		}
+		if m.Endpoint != remote.URL {
+			t.Errorf("model %q endpoint = %q, want %s", m.ID, m.Endpoint, remote.URL)
+		}
+		if m.RequiresAPIKey {
+			t.Errorf("model %q should not require API key when configured", m.ID)
+		}
+	}
+	want := []string{"remote-discovered-a", "remote-discovered-b", "remote-static"}
+	for i, id := range want {
+		if ids[i] != id {
+			t.Errorf("remote model[%d] = %q, want %q", i, ids[i], id)
+		}
+	}
+}
+
+func TestModelsEndpointRemoteDiscoversMergesWithStaticAndDedups(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"id": "shared-model", "object": "model"},
+				{"id": "dynamic-only", "object": "model"},
+			},
+		})
+	}))
+	defer remote.Close()
+
+	store, events, registry, fr := testDependencies(t)
+	router, err := NewRouter(Config{
+		Store:    store,
+		Events:   events,
+		Runner:   fr,
+		Registry: registry,
+		AppConfig: config.Config{
+			LocalEndpoint:              "http://127.0.0.1:1",
+			RemoteEndpoint:             remote.URL,
+			RemoteModels:               []string{"shared-model", "static-only"},
+			RemoteModelCacheTTLSeconds: 10,
+		},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/models", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp modelsResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if len(resp.Remote) != 3 {
+		t.Fatalf("expected 3 remote models after dedup, got %d: %v", len(resp.Remote), resp.Remote)
+	}
+
+	ids := make([]string, len(resp.Remote))
+	for i, m := range resp.Remote {
+		ids[i] = m.ID
+	}
+	want := []string{"shared-model", "dynamic-only", "static-only"}
+	for i, id := range want {
+		if ids[i] != id {
+			t.Errorf("remote model[%d] = %q, want %q", i, ids[i], id)
+		}
+	}
+}
+
+func TestModelsEndpointRemoteDiscoveryFallsBackToStatic(t *testing.T) {
+	store, events, registry, fr := testDependencies(t)
+	router, err := NewRouter(Config{
+		Store:    store,
+		Events:   events,
+		Runner:   fr,
+		Registry: registry,
+		AppConfig: config.Config{
+			LocalEndpoint:              "http://127.0.0.1:1",
+			RemoteEndpoint:             "http://127.0.0.1:1",
+			RemoteModels:               []string{"remote-fallback"},
+			RemoteModelCacheTTLSeconds: 10,
+		},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/models", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp modelsResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if len(resp.Remote) != 1 {
+		t.Fatalf("expected 1 remote model, got %d", len(resp.Remote))
+	}
+	if resp.Remote[0].ID != "remote-fallback" {
+		t.Errorf("remote model id = %q, want remote-fallback", resp.Remote[0].ID)
+	}
+}
+
 func TestModelsEndpointDiscoversLocalAndRemote(t *testing.T) {
 	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/models" {

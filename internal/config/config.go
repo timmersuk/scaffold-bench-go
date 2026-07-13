@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+// RemoteModelCacheTTLSeconds is the default cache lifetime for remote model list discovery.
+const RemoteModelCacheTTLSeconds = 10
+
+
 // Config is populated exclusively from environment variables.
 type Config struct {
 	HTTPAddr string
@@ -17,6 +21,10 @@ type Config struct {
 	RemoteEndpoint string
 	RemoteAPIKey   string
 	RemoteModels   []string
+
+	// RemoteModelCacheTTLSeconds controls how long a discovered remote model list
+	// is cached before being refetched. A value <= 0 disables caching.
+	RemoteModelCacheTTLSeconds int
 }
 
 func FromEnv() (Config, error) {
@@ -40,13 +48,14 @@ func FromEnv() (Config, error) {
 	}
 
 	cfg := Config{
-		HTTPAddr:       envDefault("BENCH_HTTP_ADDR", ":8080"),
-		DBPath:         envDefault("BENCH_DB_PATH", "data/scaffold-bench.db"),
-		DataDir:        envDefault("BENCH_DATA_DIR", "data"),
-		LocalEndpoint:  local,
-		RemoteEndpoint: remote,
-		RemoteAPIKey:   remoteKey,
-		RemoteModels:   remoteModels,
+		HTTPAddr:                   envDefault("BENCH_HTTP_ADDR", ":8080"),
+		DBPath:                     envDefault("BENCH_DB_PATH", "data/scaffold-bench.db"),
+		DataDir:                    envDefault("BENCH_DATA_DIR", "data"),
+		LocalEndpoint:              local,
+		RemoteEndpoint:             remote,
+		RemoteAPIKey:               remoteKey,
+		RemoteModels:               remoteModels,
+		RemoteModelCacheTTLSeconds: RemoteModelCacheTTLSeconds,
 	}
 
 	if cfg.HTTPAddr == "" {
