@@ -22,6 +22,7 @@ function setView(view: View) {
 export default function App() {
   const [view, setViewState] = useState<View>(parseView);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
+  const [startingRunId, setStartingRunId] = useState<string | null>(null);
 
   useEffect(() => {
     const onPop = () => setViewState(parseView());
@@ -64,6 +65,7 @@ export default function App() {
             <Dashboard
               onStartRun={() => setIsRunModalOpen(true)}
               onHistory={() => navigate({ name: "history" })}
+              startingRunId={startingRunId}
             />
           )}
           {view.name === "history" && <RunHistory onBack={() => navigate({ name: "dashboard" })} />}
@@ -74,7 +76,10 @@ export default function App() {
       {isRunModalOpen && (
         <StartRunModal
           onClose={() => setIsRunModalOpen(false)}
-          onLaunch={() => setIsRunModalOpen(false)}
+          onLaunch={(runId) => {
+            setStartingRunId(runId);
+            setIsRunModalOpen(false);
+          }}
         />
       )}
     </ToastProvider>
