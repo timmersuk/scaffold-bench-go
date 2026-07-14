@@ -58,6 +58,9 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	if cfg.Registry == nil {
 		return nil, errors.New("registry is required")
 	}
+	if cfg.AppConfig.Runtime == nil {
+		return nil, errors.New("runtime config is required")
+	}
 
 	frontend, err := fs.Sub(web.Files, "dist")
 	if err != nil {
@@ -73,7 +76,7 @@ func NewRouter(cfg Config) (http.Handler, error) {
 		buildID:   cfg.BuildID,
 		frontend:  frontend,
 		modelsCache: &modelsCache{
-			ttl: cfg.AppConfig.RemoteModelCacheTTLSeconds,
+			ttl: cfg.AppConfig.RemoteModelCacheTTLSeconds(),
 		},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 	}
@@ -81,6 +84,7 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/scenarios", srv.withMethod(http.MethodGet, srv.handleScenarios))
 	apiMux.HandleFunc("/models", srv.withMethod(http.MethodGet, srv.handleModels))
+	apiMux.HandleFunc("/config", srv.handleConfig)
 	apiMux.HandleFunc("/runs/active", srv.withMethod(http.MethodGet, srv.handleActiveRun))
 	apiMux.HandleFunc("/runs/clear", srv.withMethod(http.MethodPost, srv.handleClearRuns))
 	apiMux.HandleFunc("/runs", srv.handleRuns)
@@ -139,6 +143,66 @@ func (s *server) handleScenarios(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, infos)
+}
+
+func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleGetConfig(w, r)
+	case http.MethodPut:
+		s.handleUpdateConfig(w, r)
+	default:
+		w.Header().Set("Allow", "GET, PUT")
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+	}
+}
+
+func (s *server) handleGetConfig(w http.ResponseWriter, _ *http.Request) {
+	cfg := s.appConfig.Runtime.Snapshot()
+	writeJSON(w, http.StatusOK, runtimeConfigResponse{
+		LocalEndpoint:              cfg.LocalEndpoint,
+		RemoteEndpoint:             cfg.RemoteEndpoint,
+		RemoteAPIKey:               cfg.RemoteAPIKey,
+		RemoteModels:               cfg.RemoteModels,
+		RemoteModelCacheTTLSeconds: cfg.RemoteModelCacheTTLSeconds,
+	})
+}
+
+func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.runner.ActiveRunID(); ok {
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "cannot update runtime configuration while a run is active"})
+		return
+	}
+
+	var req updateRuntimeConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid request body"})
+		return
+	}
+
+	update := config.RuntimeConfigData{
+		LocalEndpoint:              req.LocalEndpoint,
+		RemoteEndpoint:             req.RemoteEndpoint,
+		RemoteAPIKey:               req.RemoteAPIKey,
+		RemoteModels:               req.RemoteModels,
+		RemoteModelCacheTTLSeconds: req.RemoteModelCacheTTLSeconds,
+	}
+	err := s.appConfig.Runtime.Apply(update)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to persist runtime configuration"})
+		return
+	}
+
+	// Clear cached model lists so the next /api/models call reflects the new endpoints and keys.
+	s.modelsCache.clear()
+
+	writeJSON(w, http.StatusOK, runtimeConfigResponse{
+		LocalEndpoint:              update.LocalEndpoint,
+		RemoteEndpoint:             update.RemoteEndpoint,
+		RemoteAPIKey:               update.RemoteAPIKey,
+		RemoteModels:               update.RemoteModels,
+		RemoteModelCacheTTLSeconds: update.RemoteModelCacheTTLSeconds,
+	})
 }
 
 func (s *server) handleModels(w http.ResponseWriter, r *http.Request) {
@@ -249,12 +313,21 @@ func (s *server) handleStartRun(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "modelId is required"})
 		return
 	}
+	if !s.eitherEndpointConfigured() {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "either local or remote endpoint must be configured"})
+		return
+	}
 	runID, err := s.runner.Start(req)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"runId": runID})
+}
+
+func (s *server) eitherEndpointConfigured() bool {
+	rc := s.appConfig.Runtime.Snapshot()
+	return rc.LocalEndpoint != "" || rc.RemoteEndpoint != ""
 }
 
 func (s *server) handleStopRun(w http.ResponseWriter, _ *http.Request, runID string) {
@@ -525,8 +598,17 @@ func (c *modelsCache) set(models []modelInfo) {
 	c.cache = &cachedModels{models: models, ts: time.Now()}
 }
 
+func (c *modelsCache) clear() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cache = nil
+}
+
 func (s *server) discoverRemoteModels(ctx context.Context) []modelInfo {
-	endpoint := strings.TrimRight(s.appConfig.RemoteEndpoint, "/")
+	endpoint := strings.TrimRight(s.appConfig.RemoteEndpoint(), "/")
 	if endpoint == "" {
 		return s.staticRemoteModels()
 	}
@@ -535,14 +617,15 @@ func (s *server) discoverRemoteModels(ctx context.Context) []modelInfo {
 		return cached
 	}
 
-	data, err := s.fetchOpenAIModels(ctx, endpoint, s.appConfig.RemoteAPIKey)
+	data, err := s.fetchOpenAIModels(ctx, endpoint, s.appConfig.RemoteAPIKey())
 	if err != nil {
 		slog.Debug("remote models endpoint unavailable", "endpoint", endpoint, "err", err)
 		return s.staticRemoteModels()
 	}
 
-	seen := make(map[modelListKey]struct{}, len(data)+len(s.appConfig.RemoteModels))
-	models := make([]modelInfo, 0, len(data)+len(s.appConfig.RemoteModels))
+	remoteModels := s.appConfig.RemoteModels()
+	seen := make(map[modelListKey]struct{}, len(data)+len(remoteModels))
+	models := make([]modelInfo, 0, len(data)+len(remoteModels))
 
 	for _, m := range data {
 		if m.ID == "" {
@@ -557,12 +640,12 @@ func (s *server) discoverRemoteModels(ctx context.Context) []modelInfo {
 			ID:             m.ID,
 			Source:         "remote",
 			Endpoint:       endpoint,
-			RequiresAPIKey: s.appConfig.RemoteAPIKey == "",
+			RequiresAPIKey: s.appConfig.RemoteAPIKey() == "",
 			DisplayName:    displayNameForModel(m.ID, m.Object),
 		})
 	}
 
-	for _, id := range s.appConfig.RemoteModels {
+	for _, id := range remoteModels {
 		key := modelListKey{id: id, source: "remote"}
 		if _, ok := seen[key]; ok {
 			continue
@@ -572,7 +655,7 @@ func (s *server) discoverRemoteModels(ctx context.Context) []modelInfo {
 			ID:             id,
 			Source:         "remote",
 			Endpoint:       endpoint,
-			RequiresAPIKey: s.appConfig.RemoteAPIKey == "",
+			RequiresAPIKey: s.appConfig.RemoteAPIKey() == "",
 			DisplayName:    displayNameForModel(id, ""),
 		})
 	}
@@ -611,7 +694,7 @@ func (s *server) fetchOpenAIModels(ctx context.Context, endpoint, apiKey string)
 }
 
 func (s *server) discoverLocalModels(ctx context.Context) []modelInfo {
-	endpoint := strings.TrimRight(s.appConfig.LocalEndpoint, "/")
+	endpoint := strings.TrimRight(s.appConfig.LocalEndpoint(), "/")
 	if endpoint == "" {
 		return []modelInfo{}
 	}
@@ -638,14 +721,15 @@ func (s *server) discoverLocalModels(ctx context.Context) []modelInfo {
 }
 
 func (s *server) staticRemoteModels() []modelInfo {
-	models := make([]modelInfo, 0, len(s.appConfig.RemoteModels))
-	endpoint := strings.TrimRight(s.appConfig.RemoteEndpoint, "/")
-	for _, id := range s.appConfig.RemoteModels {
+	remoteModels := s.appConfig.RemoteModels()
+	models := make([]modelInfo, 0, len(remoteModels))
+	endpoint := strings.TrimRight(s.appConfig.RemoteEndpoint(), "/")
+	for _, id := range remoteModels {
 		models = append(models, modelInfo{
 			ID:             id,
 			Source:         "remote",
 			Endpoint:       endpoint,
-			RequiresAPIKey: s.appConfig.RemoteAPIKey == "",
+			RequiresAPIKey: s.appConfig.RemoteAPIKey() == "",
 			DisplayName:    displayNameForModel(id, ""),
 		})
 	}
@@ -704,6 +788,22 @@ type openAIModel struct {
 
 type errorResponse struct {
 	Error string `json:"error"`
+}
+
+type runtimeConfigResponse struct {
+	LocalEndpoint              string   `json:"localEndpoint"`
+	RemoteEndpoint             string   `json:"remoteEndpoint"`
+	RemoteAPIKey               string   `json:"remoteApiKey"`
+	RemoteModels               []string `json:"remoteModels"`
+	RemoteModelCacheTTLSeconds int      `json:"remoteModelCacheTTLSeconds"`
+}
+
+type updateRuntimeConfigRequest struct {
+	LocalEndpoint              string   `json:"localEndpoint,omitempty"`
+	RemoteEndpoint             string   `json:"remoteEndpoint,omitempty"`
+	RemoteAPIKey               string   `json:"remoteApiKey,omitempty"`
+	RemoteModels               []string `json:"remoteModels,omitempty"`
+	RemoteModelCacheTTLSeconds int      `json:"remoteModelCacheTTLSeconds,omitempty"`
 }
 
 type runSummary struct {

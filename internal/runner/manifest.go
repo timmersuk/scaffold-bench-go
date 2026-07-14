@@ -63,10 +63,10 @@ type Build struct {
 // Rubric is the full set of checks grouped by axis.
 type Rubric struct {
 	Correctness  []Check `yaml:"correctness"`
-	Scope          []Check `yaml:"scope"`
-	Pattern        []Check `yaml:"pattern"`
-	Verification   []Check `yaml:"verification"`
-	Cleanup        []Check `yaml:"cleanup"`
+	Scope        []Check `yaml:"scope"`
+	Pattern      []Check `yaml:"pattern"`
+	Verification []Check `yaml:"verification"`
+	Cleanup      []Check `yaml:"cleanup"`
 }
 
 // Check is a single rubric check.

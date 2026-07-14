@@ -71,6 +71,14 @@ export interface ReportData {
   difficulty: unknown[];
 }
 
+export interface RuntimeConfig {
+  localEndpoint: string;
+  remoteEndpoint: string;
+  remoteApiKey: string;
+  remoteModels: string[];
+  remoteModelCacheTTLSeconds: number;
+}
+
 export interface OneshotTestSummary {
   id: string;
   name: string;
