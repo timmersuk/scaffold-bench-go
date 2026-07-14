@@ -81,12 +81,20 @@ export function reducer(state: ReducerState, action: Action): ReducerState {
       return {
         ...INITIAL_REDUCER_STATE,
         runId: event.runId,
-        status: "running",
+        status: "warming_up",
         startedAt: event.ts,
         scenarios,
         model: event.model ?? null,
         _nextLogId: state._nextLogId,
       };
+    }
+
+    case "model_warmup_started": {
+      return { ...state, status: "warming_up" };
+    }
+
+    case "model_warmup_finished": {
+      return { ...state, status: "running" };
     }
 
     case "scenario_started": {

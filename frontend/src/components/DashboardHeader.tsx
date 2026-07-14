@@ -14,6 +14,7 @@ interface DashboardHeaderProps {
 
 const BADGE_STYLES: Record<RunStatus, string> = {
   idle: "border-gray-300 text-gray-500",
+  warming_up: "border-yellow-600 text-yellow-600 animate-pulse",
   running: "border-blue-600 text-blue-600 animate-pulse",
   done: "border-green-600 text-green-600",
   stopped: "border-red-600 text-red-600",
@@ -29,7 +30,7 @@ export function DashboardHeader({
   onStop,
   onHistory,
 }: DashboardHeaderProps) {
-  const isRunning = status === "running";
+  const isRunning = status === "running" || status === "warming_up";
 
   return (
     <header className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-4 pb-4 border-b border-gray-200 flex-none">

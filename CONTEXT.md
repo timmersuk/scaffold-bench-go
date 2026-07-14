@@ -68,3 +68,17 @@ The outcome of an individual Scenario within a Run, including its status (`pass`
 
 **Dashboard**:
 The primary frontend view for selecting scenarios, configuring a Model, starting a Run, and watching the Run Stream.
+
+## Run Preflight
+
+**Readiness Gate**:
+A blocking check performed before a Run begins. It sends a minimal completion request to the Model endpoint to confirm the model is reachable and loaded into VRAM. If the gate fails, the Run is not started.
+_Avoid_: Preflight check, health check.
+
+**Metadata Survey**:
+A best-effort extraction of hardware and model metadata (GPU backend, GPU model, GPU count, VRAM, quantization, context size) from the readiness gate's warmup response. If extraction fails, fields are left null and the Run proceeds.
+_Avoid_: System info, hardware detection.
+
+**Warmup Phase**:
+A distinct Run phase (`warming_up` status) between run start and the first scenario. The readiness gate and metadata survey execute during this phase. It prevents model load time from contaminating scenario timing metrics.
+_Avoid_: Initialization, loading phase.

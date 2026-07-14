@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -67,6 +68,31 @@ func TestRunBuildCommandsFailsOnError(t *testing.T) {
 func TestEngineEndToEnd(t *testing.T) {
 	calls := 0
 	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Handle /v1/models request
+		if r.URL.Path == "/v1/models" && r.Method == "GET" {
+			w.Header().Set("content-type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"data":[{"id":"fake","object":"model","owned_by":"test"}]}`)
+			return
+		}
+		// Handle warmup request (non-streaming completion)
+		if r.URL.Path == "/v1/chat/completions" && r.Method == "POST" {
+			// Check if this is a streaming request by reading the body
+			var reqBody map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&reqBody); err == nil {
+				if stream, ok := reqBody["stream"].(bool); ok && stream {
+					// This is a streaming request, handle it below
+					goto streaming
+				}
+			}
+			// Non-streaming warmup request
+			w.Header().Set("content-type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"model":"fake","choices":[{"message":{"role":"assistant","content":"hi"}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
+			return
+		}
+	streaming:
+		// Handle streaming requests
 		w.Header().Set("content-type", "text/event-stream")
 		calls++
 		if calls == 1 {

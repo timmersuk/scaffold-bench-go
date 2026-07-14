@@ -312,6 +312,32 @@ func (s *Store) UpdateRun(r model.Run) error {
 	return nil
 }
 
+// UpdateRunMetadata updates the metadata fields of a run (GPU info, quant, context size).
+func (s *Store) UpdateRunMetadata(r model.Run) error {
+	_, err := s.db.Exec(`
+		UPDATE runs SET
+			status = ?,
+			model_file = ?,
+			quant = ?,
+			quant_tier = ?,
+			quant_source = ?,
+			context_size = ?,
+			gpu_backend = ?,
+			gpu_model = ?,
+			gpu_count = ?,
+			vram_total_mb = ?
+		WHERE id = ?
+	`,
+		string(r.Status), nullString(r.ModelFile), nullString(r.Quant), nullFloat64(r.QuantTier),
+		nullString(r.QuantSource), nullInt(r.ContextSize), nullString(r.GPUBackend),
+		nullString(r.GPUModel), nullInt(r.GPUCount), nullInt(r.VRAMTotalMB), r.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("update run metadata: %w", err)
+	}
+	return nil
+}
+
 // UpsertScenarioRun inserts or replaces a scenario run row.
 func (s *Store) UpsertScenarioRun(sr model.ScenarioRun) error {
 	mutated := sql.NullBool{Bool: false, Valid: false}

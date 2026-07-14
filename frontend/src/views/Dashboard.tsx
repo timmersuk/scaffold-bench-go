@@ -168,7 +168,7 @@ export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardPro
   };
 
   const handleStop = () => {
-    if (!activeRunId || state.status !== "running") return;
+    if (!activeRunId || (state.status !== "running" && state.status !== "warming_up")) return;
     api.stopRun(activeRunId).catch((err) => {
       pushToast(err instanceof Error ? err.message : "Failed to stop run", "error");
     });
@@ -178,7 +178,7 @@ export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardPro
     startingRunId != null && state.runId === null && state.status === "idle";
 
   const elapsed =
-    state.status === "running" && state.startedAt
+    (state.status === "running" || state.status === "warming_up") && state.startedAt
       ? Date.now() - state.startedAt
       : 0;
 

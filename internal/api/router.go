@@ -95,7 +95,7 @@ func NewRouter(cfg Config) (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", srv.withMethod(http.MethodGet, srv.handleHealth))
-	mux.Handle("/api/", http.StripPrefix("/api", apiMux))
+	mux.Handle("/api/", http.StripPrefix("/api", loggingMiddleware(apiMux)))
 	mux.HandleFunc("/", srv.handleFrontend)
 
 	return mux, nil
@@ -881,6 +881,35 @@ func (s *server) withMethod(method string, next http.HandlerFunc) http.HandlerFu
 		}
 		next(w, r)
 	}
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("api request started",
+			"method", r.Method,
+			"path", r.URL.Path,
+		)
+		start := time.Now()
+		wrapped := &responseWriterWithStatus{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(wrapped, r)
+		duration := time.Since(start)
+		slog.Info("api request completed",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", wrapped.status,
+			"duration", duration,
+		)
+	})
+}
+
+type responseWriterWithStatus struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *responseWriterWithStatus) WriteHeader(statusCode int) {
+	w.status = statusCode
+	w.ResponseWriter.WriteHeader(statusCode)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

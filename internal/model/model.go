@@ -14,10 +14,11 @@ type Event struct {
 type RunStatus string
 
 const (
-	RunRunning RunStatus = "running"
-	RunDone    RunStatus = "done"
-	RunFailed  RunStatus = "failed"
-	RunStopped RunStatus = "stopped"
+	RunWarmingUp RunStatus = "warming_up"
+	RunRunning   RunStatus = "running"
+	RunDone      RunStatus = "done"
+	RunFailed    RunStatus = "failed"
+	RunStopped   RunStatus = "stopped"
 )
 
 // ScenarioStatus is the result status of an individual scenario run.
@@ -35,17 +36,19 @@ const (
 
 // Event types produced by the run engine.
 const (
-	EventRunStarted       = "run_started"
-	EventScenarioStarted  = "scenario_started"
-	EventAssistant        = "assistant"
-	EventAssistantDelta   = "assistant_delta"
-	EventToolCall         = "tool_call"
-	EventToolResult       = "tool_result"
-	EventModelMetrics     = "model_metrics"
-	EventScenarioFinished = "scenario_finished"
-	EventRunFinished      = "run_finished"
-	EventRunFailed        = "run_failed"
-	EventRunStopped       = "run_stopped"
+	EventRunStarted         = "run_started"
+	EventModelWarmupStarted = "model_warmup_started"
+	EventModelWarmupFinished = "model_warmup_finished"
+	EventScenarioStarted    = "scenario_started"
+	EventAssistant          = "assistant"
+	EventAssistantDelta     = "assistant_delta"
+	EventToolCall           = "tool_call"
+	EventToolResult         = "tool_result"
+	EventModelMetrics       = "model_metrics"
+	EventScenarioFinished   = "scenario_finished"
+	EventRunFinished        = "run_finished"
+	EventRunFailed          = "run_failed"
+	EventRunStopped         = "run_stopped"
 )
 
 // Run is a top-level benchmark run.

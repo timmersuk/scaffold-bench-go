@@ -136,6 +136,21 @@ export type PersistedEvent =
       harness?: string | null;
     })
   | (PersistedEventBase & {
+      type: "model_warmup_started";
+      runId: string;
+      model: string;
+      endpoint: string;
+    })
+  | (PersistedEventBase & {
+      type: "model_warmup_finished";
+      runId: string;
+      durationMs: number;
+      modelFile?: string;
+      quant?: string;
+      gpuBackend?: string;
+      gpuModel?: string;
+    })
+  | (PersistedEventBase & {
       type: "run_finished";
       runId: string;
       totalPoints: number;
@@ -234,7 +249,7 @@ export type ScenarioState = {
   evaluation?: ScenarioEvaluation;
 };
 
-export type RunStatus = "idle" | "running" | "done" | "stopped" | "failed";
+export type RunStatus = "idle" | "warming_up" | "running" | "done" | "stopped" | "failed";
 
 export type RunState = {
   runId: string | null;
@@ -270,6 +285,27 @@ export function normalizeBackendEvent(ev: BackendEvent): PersistedEvent | null {
         model: (p.model as string | null) ?? null,
         endpoint: (p.endpoint as string | null) ?? null,
         harness: (p.harness as string | null) ?? null,
+      };
+    }
+    case "model_warmup_started": {
+      const p = (ev.payload ?? {}) as Record<string, unknown>;
+      return {
+        ...base,
+        type: "model_warmup_started",
+        model: (p.model as string) ?? "",
+        endpoint: (p.endpoint as string) ?? "",
+      };
+    }
+    case "model_warmup_finished": {
+      const p = (ev.payload ?? {}) as Record<string, unknown>;
+      return {
+        ...base,
+        type: "model_warmup_finished",
+        durationMs: typeof p.durationMs === "number" ? p.durationMs : 0,
+        modelFile: (p.modelFile as string) ?? undefined,
+        quant: (p.quant as string) ?? undefined,
+        gpuBackend: (p.gpuBackend as string) ?? undefined,
+        gpuModel: (p.gpuModel as string) ?? undefined,
       };
     }
     case "run_finished": {
