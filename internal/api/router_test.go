@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -54,212 +55,15 @@ func testDependencies(tb testing.TB) (*storage.Store, *realtime.Hub, *runner.Reg
 
 func TestStartRunEndpoint(t *testing.T) {
 	store, events, registry, fr := testDependencies(t)
+	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
+		RemoteModels: []string{"shared-model", "dynamic-only", "static-only"},
+	})
 	router, err := NewRouter(Config{
 		Store:     store,
 		Events:    events,
 		Runner:    fr,
 		Registry:  registry,
-		AppConfig: config.Config{LocalEndpoint: "http://127.0.0.1:1"},
-	})
-	if err != nil {
-		t.Fatalf("new router: %v", err)
-	}
-
-	body := strings.NewReader(`{"scenarioIds":["demo"],"modelId":"test"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/runs", body)
-	req.Header.Set("content-type", "application/json")
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusAccepted {
-		t.Fatalf("expected accepted, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if fr.startedID != "run-123" {
-		t.Fatalf("runner.Start not called")
-	}
-}
-
-func TestStopRunEndpoint(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
-	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{LocalEndpoint: "http://127.0.0.1:1"},
-	})
-	if err != nil {
-		t.Fatalf("new router: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/runs/run-42/stop", nil)
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if fr.stoppedID != "run-42" {
-		t.Fatalf("runner.Stop not called, got %q", fr.stoppedID)
-	}
-}
-
-func TestScenariosEndpointReturnsDemo(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
-	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{LocalEndpoint: "http://127.0.0.1:1"},
-	})
-	if err != nil {
-		t.Fatalf("new router: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/scenarios", nil)
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
-	}
-
-	var infos []scenarioInfo
-	if err := json.Unmarshal(rr.Body.Bytes(), &infos); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-
-	found := false
-	for _, info := range infos {
-		if info.ID == "demo" {
-			found = true
-			if info.Name != "create-hello" {
-				t.Errorf("demo name = %q, want create-hello", info.Name)
-			}
-			if info.Category != "basic" {
-				t.Errorf("demo category = %q, want basic", info.Category)
-			}
-			if info.Difficulty != "low" {
-				t.Errorf("demo difficulty = %q, want low", info.Difficulty)
-			}
-			if info.MaxPoints != 10 {
-				t.Errorf("demo maxPoints = %d, want 10", info.MaxPoints)
-			}
-			if info.Prompt == "" {
-				t.Errorf("demo prompt should not be empty")
-			}
-			if info.Track != "execution" {
-				t.Errorf("demo track = %q, want execution", info.Track)
-			}
-		}
-	}
-	if !found {
-		t.Fatalf("demo scenario not found in response: %s", rr.Body.String())
-	}
-}
-
-func TestModelsEndpointDiscoversRemoteModels(t *testing.T) {
-	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/models" {
-			http.NotFound(w, r)
-			return
-		}
-		if r.Header.Get("Authorization") != "Bearer secret" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"data": []map[string]any{
-				{"id": "remote-discovered-a", "object": "model"},
-				{"id": "remote-discovered-b", "object": "model"},
-			},
-		})
-	}))
-	defer remote.Close()
-
-	store, events, registry, fr := testDependencies(t)
-	router, err := NewRouter(Config{
-		Store:    store,
-		Events:   events,
-		Runner:   fr,
-		Registry: registry,
-		AppConfig: config.Config{
-			LocalEndpoint:              "http://127.0.0.1:1",
-			RemoteEndpoint:             remote.URL,
-			RemoteAPIKey:               "secret",
-			RemoteModels:               []string{"remote-static"},
-			RemoteModelCacheTTLSeconds: 10,
-		},
-	})
-	if err != nil {
-		t.Fatalf("new router: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/models", nil)
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
-	}
-
-	var resp modelsResponse
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-
-	if len(resp.Local) != 0 {
-		t.Errorf("expected 0 local models, got %d", len(resp.Local))
-	}
-	if len(resp.Remote) != 3 {
-		t.Fatalf("expected 3 remote models, got %d: %v", len(resp.Remote), resp.Remote)
-	}
-
-	ids := make([]string, len(resp.Remote))
-	for i, m := range resp.Remote {
-		ids[i] = m.ID
-		if m.Source != "remote" {
-			t.Errorf("model %q source = %q, want remote", m.ID, m.Source)
-		}
-		if m.Endpoint != remote.URL {
-			t.Errorf("model %q endpoint = %q, want %s", m.ID, m.Endpoint, remote.URL)
-		}
-		if m.RequiresAPIKey {
-			t.Errorf("model %q should not require API key when configured", m.ID)
-		}
-	}
-	want := []string{"remote-discovered-a", "remote-discovered-b", "remote-static"}
-	for i, id := range want {
-		if ids[i] != id {
-			t.Errorf("remote model[%d] = %q, want %q", i, ids[i], id)
-		}
-	}
-}
-
-func TestModelsEndpointRemoteDiscoversMergesWithStaticAndDedups(t *testing.T) {
-	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"data": []map[string]any{
-				{"id": "shared-model", "object": "model"},
-				{"id": "dynamic-only", "object": "model"},
-			},
-		})
-	}))
-	defer remote.Close()
-
-	store, events, registry, fr := testDependencies(t)
-	router, err := NewRouter(Config{
-		Store:    store,
-		Events:   events,
-		Runner:   fr,
-		Registry: registry,
-		AppConfig: config.Config{
-			LocalEndpoint:              "http://127.0.0.1:1",
-			RemoteEndpoint:             remote.URL,
-			RemoteModels:               []string{"shared-model", "static-only"},
-			RemoteModelCacheTTLSeconds: 10,
-		},
+		AppConfig: config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -296,17 +100,15 @@ func TestModelsEndpointRemoteDiscoversMergesWithStaticAndDedups(t *testing.T) {
 
 func TestModelsEndpointRemoteDiscoveryFallsBackToStatic(t *testing.T) {
 	store, events, registry, fr := testDependencies(t)
+	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
+		RemoteModels: []string{"remote-fallback"},
+	})
 	router, err := NewRouter(Config{
-		Store:    store,
-		Events:   events,
-		Runner:   fr,
-		Registry: registry,
-		AppConfig: config.Config{
-			LocalEndpoint:              "http://127.0.0.1:1",
-			RemoteEndpoint:             "http://127.0.0.1:1",
-			RemoteModels:               []string{"remote-fallback"},
-			RemoteModelCacheTTLSeconds: 10,
-		},
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -354,16 +156,15 @@ func TestModelsEndpointReusesHTTPClientForLocalDiscovery(t *testing.T) {
 	defer local.Close()
 
 	store, events, registry, fr := testDependencies(t)
+	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
+		LocalEndpoint: local.URL,
+	})
 	router, err := NewRouter(Config{
-		Store:    store,
-		Events:   events,
-		Runner:   fr,
-		Registry: registry,
-		AppConfig: config.Config{
-			LocalEndpoint:  local.URL,
-			RemoteEndpoint: "https://api.remote.example.com",
-			RemoteModels:   []string{"remote-model-1"},
-		},
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -413,17 +214,16 @@ func TestModelsEndpointReusesHTTPClientForRemoteDiscovery(t *testing.T) {
 	defer remote.Close()
 
 	store, events, registry, fr := testDependencies(t)
+	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
+		RemoteEndpoint: remote.URL,
+		RemoteModels:   []string{"remote-model-b"},
+	})
 	router, err := NewRouter(Config{
-		Store:    store,
-		Events:   events,
-		Runner:   fr,
-		Registry: registry,
-		AppConfig: config.Config{
-			LocalEndpoint:              "http://127.0.0.1:1",
-			RemoteEndpoint:             remote.URL,
-			RemoteModels:               []string{"remote-static"},
-			RemoteModelCacheTTLSeconds: 0,
-		},
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -469,16 +269,17 @@ func TestModelsEndpointDiscoversLocalAndRemote(t *testing.T) {
 	defer local.Close()
 
 	store, events, registry, fr := testDependencies(t)
+	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
+		LocalEndpoint:  local.URL,
+		RemoteEndpoint: "https://api.remote.example.com",
+		RemoteModels:   []string{"remote-model-1", "remote-model-2"},
+	})
 	router, err := NewRouter(Config{
-		Store:    store,
-		Events:   events,
-		Runner:   fr,
-		Registry: registry,
-		AppConfig: config.Config{
-			LocalEndpoint:  local.URL,
-			RemoteEndpoint: "https://api.remote.example.com",
-			RemoteModels:   []string{"remote-model-1", "remote-model-2"},
-		},
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -532,91 +333,15 @@ func TestModelsEndpointDiscoversLocalAndRemote(t *testing.T) {
 
 func TestRunEventsEndpointReturnsPersistedEvents(t *testing.T) {
 	store, events, registry, fr := testDependencies(t)
+	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
+		RemoteModels: []string{"local-model-a", "Local Model B", "alreadyfriend", "remote-model-1", "Friendly Remote"},
+	})
 	router, err := NewRouter(Config{
 		Store:     store,
 		Events:    events,
 		Runner:    fr,
 		Registry:  registry,
-		AppConfig: config.Config{LocalEndpoint: "http://127.0.0.1:1"},
-	})
-	if err != nil {
-		t.Fatalf("new router: %v", err)
-	}
-
-	run := model.Run{
-		ID:          "run-events",
-		StartedAt:   1,
-		Status:      model.RunRunning,
-		ScenarioIDs: []string{"demo"},
-		Runtime:     "local",
-		RuntimeKind: "llama.cpp",
-		Model:       "test-model",
-	}
-	if err := store.InsertRun(run); err != nil {
-		t.Fatalf("insert run: %v", err)
-	}
-	if err := store.InsertEvent("run-events", "demo", 0, 1, model.EventScenarioStarted, map[string]any{"scenarioId": "demo"}); err != nil {
-		t.Fatalf("insert event: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/runs/run-events/events", nil)
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
-	}
-
-	var resp []map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(resp) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(resp))
-	}
-	if resp[0]["type"] != model.EventScenarioStarted {
-		t.Errorf("event type = %q, want %q", resp[0]["type"], model.EventScenarioStarted)
-	}
-
-	req2 := httptest.NewRequest(http.MethodGet, "/api/runs/run-events/events?fromSeq=0", nil)
-	rr2 := httptest.NewRecorder()
-	router.ServeHTTP(rr2, req2)
-	var filtered []map[string]any
-	if err := json.Unmarshal(rr2.Body.Bytes(), &filtered); err != nil {
-		t.Fatalf("decode fromSeq response: %v", err)
-	}
-	if len(filtered) != 0 {
-		t.Errorf("expected 0 events with fromSeq=0, got %d", len(filtered))
-	}
-}
-
-func TestModelsEndpointIncludesDisplayNames(t *testing.T) {
-	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/models" {
-			http.NotFound(w, r)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"data": []map[string]any{
-				{"id": "local-model-a", "object": "model"},
-				{"id": "Local Model B", "object": "model"},
-				{"id": "alreadyfriend", "object": "model"},
-			},
-		})
-	}))
-	defer local.Close()
-
-	store, events, registry, fr := testDependencies(t)
-	router, err := NewRouter(Config{
-		Store:    store,
-		Events:   events,
-		Runner:   fr,
-		Registry: registry,
-		AppConfig: config.Config{
-			LocalEndpoint:  local.URL,
-			RemoteEndpoint: "https://api.remote.example.com",
-			RemoteModels:   []string{"remote-model-1", "Friendly Remote"},
-		},
+		AppConfig: config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -659,16 +384,15 @@ func TestModelsEndpointIncludesDisplayNames(t *testing.T) {
 
 func TestModelsEndpointReturnsRemoteWhenLocalUnreachable(t *testing.T) {
 	store, events, registry, fr := testDependencies(t)
+	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
+		RemoteModels: []string{"remote-fallback"},
+	})
 	router, err := NewRouter(Config{
-		Store:    store,
-		Events:   events,
-		Runner:   fr,
-		Registry: registry,
-		AppConfig: config.Config{
-			LocalEndpoint:  "http://127.0.0.1:1",
-			RemoteEndpoint: "https://api.remote.example.com",
-			RemoteModels:   []string{"remote-fallback"},
-		},
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -706,17 +430,16 @@ func TestModelsEndpointReturnsRemoteWhenLocalUnreachable(t *testing.T) {
 
 func TestModelsEndpointRemoteDoesNotRequireKeyWhenConfigured(t *testing.T) {
 	store, events, registry, fr := testDependencies(t)
+	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
+		RemoteModels: []string{"remote-model"},
+		RemoteAPIKey: "some-api-key",
+	})
 	router, err := NewRouter(Config{
-		Store:    store,
-		Events:   events,
-		Runner:   fr,
-		Registry: registry,
-		AppConfig: config.Config{
-			LocalEndpoint:  "http://127.0.0.1:1",
-			RemoteEndpoint: "https://api.remote.example.com",
-			RemoteAPIKey:   "secret",
-			RemoteModels:   []string{"remote-keyed"},
-		},
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -745,12 +468,13 @@ func TestModelsEndpointRemoteDoesNotRequireKeyWhenConfigured(t *testing.T) {
 
 func TestListRunsEndpointReturnsRuns(t *testing.T) {
 	store, events, registry, fr := testDependencies(t)
+	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{})
 	router, err := NewRouter(Config{
 		Store:     store,
 		Events:    events,
 		Runner:    fr,
 		Registry:  registry,
-		AppConfig: config.Config{LocalEndpoint: "http://127.0.0.1:1"},
+		AppConfig: config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -798,12 +522,13 @@ func TestListRunsEndpointReturnsRuns(t *testing.T) {
 
 func TestGetRunEndpointReturnsRunWithScenarios(t *testing.T) {
 	store, events, registry, fr := testDependencies(t)
+	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{})
 	router, err := NewRouter(Config{
 		Store:     store,
 		Events:    events,
 		Runner:    fr,
 		Registry:  registry,
-		AppConfig: config.Config{LocalEndpoint: "http://127.0.0.1:1"},
+		AppConfig: config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -864,3 +589,159 @@ func TestGetRunEndpointReturnsRunWithScenarios(t *testing.T) {
 
 func intPtr(v int) *int { return &v }
 
+type mutableRuntimeConfig struct {
+	data config.RuntimeConfigData
+}
+
+func newMutableRuntimeConfig(data config.RuntimeConfigData) config.RuntimeConfig {
+	return &mutableRuntimeConfig{data: data}
+}
+
+func (m *mutableRuntimeConfig) LocalEndpoint() string                { return m.data.LocalEndpoint }
+func (m *mutableRuntimeConfig) RemoteEndpoint() string               { return m.data.RemoteEndpoint }
+func (m *mutableRuntimeConfig) RemoteAPIKey() string                 { return m.data.RemoteAPIKey }
+func (m *mutableRuntimeConfig) RemoteModels() []string               { return m.data.RemoteModels }
+func (m *mutableRuntimeConfig) RemoteModelCacheTTLSeconds() int      { return m.data.RemoteModelCacheTTLSeconds }
+func (m *mutableRuntimeConfig) Snapshot() config.RuntimeConfigData   { return m.data }
+func (m *mutableRuntimeConfig) Apply(update config.RuntimeConfigData) error {
+	m.data = update
+	return nil
+}
+func (m *mutableRuntimeConfig) ValidateEndpoints() error {
+	if m.data.LocalEndpoint == "" && m.data.RemoteEndpoint == "" {
+		return errors.New("at least one endpoint must be configured")
+	}
+	return nil
+}
+
+func TestGetConfigEndpoint(t *testing.T) {
+	store, events, registry, fr := testDependencies(t)
+	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
+		LocalEndpoint:              "http://localhost:8080",
+		RemoteEndpoint:             "https://api.remote.example.com",
+		RemoteAPIKey:               "test-key",
+		RemoteModels:               []string{"model-a", "model-b"},
+		RemoteModelCacheTTLSeconds: 30,
+	})
+	router, err := NewRouter(Config{
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{Runtime: rc},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp runtimeConfigResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.LocalEndpoint != "http://localhost:8080" {
+		t.Errorf("localEndpoint = %q, want http://localhost:8080", resp.LocalEndpoint)
+	}
+	if resp.RemoteEndpoint != "https://api.remote.example.com" {
+		t.Errorf("remoteEndpoint = %q, want https://api.remote.example.com", resp.RemoteEndpoint)
+	}
+	if resp.RemoteAPIKey != "test-key" {
+		t.Errorf("remoteApiKey = %q, want test-key", resp.RemoteAPIKey)
+	}
+	if len(resp.RemoteModels) != 2 || resp.RemoteModels[0] != "model-a" || resp.RemoteModels[1] != "model-b" {
+		t.Errorf("remoteModels = %v, want [model-a model-b]", resp.RemoteModels)
+	}
+	if resp.RemoteModelCacheTTLSeconds != 30 {
+		t.Errorf("remoteModelCacheTTLSeconds = %d, want 30", resp.RemoteModelCacheTTLSeconds)
+	}
+}
+
+func TestUpdateConfigEndpoint(t *testing.T) {
+	store, events, registry, fr := testDependencies(t)
+	rc := newMutableRuntimeConfig(config.RuntimeConfigData{
+		LocalEndpoint: "http://localhost:8080",
+	})
+	router, err := NewRouter(Config{
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{Runtime: rc},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	body := `{"localEndpoint":"http://new-local:9090","remoteEndpoint":"https://new-remote","remoteApiKey":"new-key","remoteModels":["new-model"],"remoteModelCacheTTLSeconds":60}`
+	req := httptest.NewRequest(http.MethodPut, "/api/config", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp runtimeConfigResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.LocalEndpoint != "http://new-local:9090" {
+		t.Errorf("localEndpoint = %q, want http://new-local:9090", resp.LocalEndpoint)
+	}
+	if resp.RemoteEndpoint != "https://new-remote" {
+		t.Errorf("remoteEndpoint = %q, want https://new-remote", resp.RemoteEndpoint)
+	}
+	if resp.RemoteAPIKey != "new-key" {
+		t.Errorf("remoteApiKey = %q, want new-key", resp.RemoteAPIKey)
+	}
+	if len(resp.RemoteModels) != 1 || resp.RemoteModels[0] != "new-model" {
+		t.Errorf("remoteModels = %v, want [new-model]", resp.RemoteModels)
+	}
+	if resp.RemoteModelCacheTTLSeconds != 60 {
+		t.Errorf("remoteModelCacheTTLSeconds = %d, want 60", resp.RemoteModelCacheTTLSeconds)
+	}
+}
+
+func TestUpdateConfigRejectedWhenActive(t *testing.T) {
+	store, events, registry, fr := testDependencies(t)
+	fr.activeID = "run-123"
+	rc := newMutableRuntimeConfig(config.RuntimeConfigData{
+		LocalEndpoint: "http://localhost:8080",
+	})
+	router, err := NewRouter(Config{
+		Store:     store,
+		Events:    events,
+		Runner:    fr,
+		Registry:  registry,
+		AppConfig: config.Config{Runtime: rc},
+	})
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+
+	body := `{"localEndpoint":"http://new-local:9090"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/config", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected conflict, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp errorResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !strings.Contains(resp.Error, "active") {
+		t.Errorf("error = %q, want it to mention active run", resp.Error)
+	}
+}

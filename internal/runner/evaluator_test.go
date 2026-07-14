@@ -458,5 +458,3 @@ func TestEvaluatorNoAddedCommentsFails(t *testing.T) {
 		t.Fatalf("expected 0 points, got %d: %v", res.Points, res.Checks)
 	}
 }
-
-

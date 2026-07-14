@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, History, FlaskConical } from "lucide-react";
+import { LayoutDashboard, History, FlaskConical, Settings as SettingsIcon } from "lucide-react";
 import { Dashboard } from "./views/Dashboard";
 import { RunHistory } from "./views/RunHistory";
 import { RunDetailView } from "./views/RunDetailView";
+import { Settings } from "./views/Settings";
 import { StartRunModal } from "./components/StartRunModal";
 import { ToastProvider } from "./components/Toaster";
 
@@ -10,6 +11,7 @@ type View =
   | { name: "dashboard" }
   | { name: "history" }
   | { name: "oneshot" }
+  | { name: "settings" }
   | { name: "run"; runId: string };
 
 function parseView(): View {
@@ -17,6 +19,7 @@ function parseView(): View {
   const name = params.get("view") ?? "dashboard";
   if (name === "history") return { name: "history" };
   if (name === "oneshot") return { name: "oneshot" };
+  if (name === "settings") return { name: "settings" };
   if (name === "run") {
     const runId = params.get("runId");
     if (runId) return { name: "run", runId };
@@ -72,6 +75,9 @@ export default function App() {
               <NavButton {...link({ name: "oneshot" })} icon={<FlaskConical size={18} />}>
                 One-shot
               </NavButton>
+              <NavButton {...link({ name: "settings" })} icon={<SettingsIcon size={18} />}>
+                Settings
+              </NavButton>
             </nav>
           </div>
         </header>
@@ -92,6 +98,7 @@ export default function App() {
           )}
           {view.name === "run" && <RunDetailView runId={view.runId} onBack={() => navigate({ name: "history" })} />}
           {view.name === "oneshot" && <OneShotLab onBack={() => navigate({ name: "dashboard" })} />}
+          {view.name === "settings" && <Settings onBack={() => navigate({ name: "dashboard" })} />}
         </main>
       </div>
 

@@ -95,7 +95,7 @@ func (e *Engine) Start(req StartRequest) (string, error) {
 		Harness:     req.Harness,
 	}
 	if run.Endpoint == "" {
-		run.Endpoint = e.cfg.LocalEndpoint
+		run.Endpoint = e.cfg.LocalEndpoint()
 	}
 
 	if err := e.store.InsertRun(run); err != nil {
@@ -198,7 +198,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, req StartRequest,
 
 	endpoint := req.Endpoint
 	if endpoint == "" {
-		endpoint = e.cfg.LocalEndpoint
+		endpoint = e.cfg.LocalEndpoint()
 	}
 	timeout := time.Duration(req.TimeoutMs) * time.Millisecond
 	if timeout == 0 {

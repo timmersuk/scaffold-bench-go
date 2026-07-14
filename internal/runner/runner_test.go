@@ -93,7 +93,10 @@ func TestEngineEndToEnd(t *testing.T) {
 	}
 
 	hub := realtime.NewHub()
-	cfg := config.Config{DataDir: dir, LocalEndpoint: modelServer.URL}
+	runtimeCfg := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
+		LocalEndpoint: modelServer.URL,
+	})
+	cfg := config.Config{EnvConfig: config.EnvConfig{DataDir: dir}, Runtime: runtimeCfg}
 	engine := NewEngine(store, hub, cfg, NewRegistry())
 
 	runID, err := engine.Start(StartRequest{
@@ -162,7 +165,10 @@ func TestRunScenarioSkipsOnMissingRequirement(t *testing.T) {
 	}
 
 	hub := realtime.NewHub()
-	cfg := config.Config{DataDir: dir}
+	runtimeCfg := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
+		LocalEndpoint: "http://localhost:8080",
+	})
+	cfg := config.Config{EnvConfig: config.EnvConfig{DataDir: dir}, Runtime: runtimeCfg}
 	registry := &Registry{
 		scenarios: map[string]Scenario{
 			"missing-tool": {

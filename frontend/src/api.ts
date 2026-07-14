@@ -6,6 +6,7 @@ import type {
   ReportData,
   RunDetail,
   RunSummary,
+  RuntimeConfig,
   ScenarioInfo,
 } from "./types";
 
@@ -36,6 +37,16 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new ApiError(`PUT ${path} -> ${res.status}`, res.status);
+  return res.json() as Promise<T>;
+}
+
 export const api = {
   getScenarios: (signal?: AbortSignal) => get<ScenarioInfo[]>("/scenarios", signal),
   getModels: (signal?: AbortSignal) => get<ModelsResponse>("/models", signal),
@@ -58,4 +69,6 @@ export const api = {
     post<{ runId: string }>("/oneshot/runs", body),
   latestOneshot: (signal?: AbortSignal) =>
     get<OneshotLatestRun | null>("/oneshot/runs/latest", signal),
+  getConfig: (signal?: AbortSignal) => get<RuntimeConfig>("/config", signal),
+  updateConfig: (body: RuntimeConfig) => put<RuntimeConfig>("/config", body),
 };

@@ -32,6 +32,12 @@ func run() error {
 		return err
 	}
 
+	runtimeCfg, err := config.NewFileRuntimeConfig(cfg.DataDir)
+	if err != nil {
+		return err
+	}
+	cfg.Runtime = runtimeCfg
+
 	if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o755); err != nil {
 		return err
 	}
