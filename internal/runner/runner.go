@@ -86,7 +86,7 @@ func (e *Engine) Start(req StartRequest) (string, error) {
 	run := model.Run{
 		ID:          runID,
 		StartedAt:   now,
-		Status:      model.RunRunning,
+		Status:      model.RunWarmingUp,
 		ScenarioIDs: req.ScenarioIDs,
 		Runtime:     "local",
 		RuntimeKind: "llama.cpp",
@@ -203,6 +203,46 @@ func (e *Engine) executeRun(ctx context.Context, runID string, req StartRequest,
 	timeout := time.Duration(req.TimeoutMs) * time.Millisecond
 	if timeout == 0 {
 		timeout = 10 * time.Minute
+	}
+
+	// Perform warmup phase
+	warmupStart := time.Now().UnixMilli()
+	e.publish(runID, "", ar.nextSeq(), warmupStart, model.EventModelWarmupStarted, map[string]any{
+		"model":    req.ModelID,
+		"endpoint": endpoint,
+	})
+
+	warmupResult, err := performWarmup(ctx, endpoint, req.ModelID, req.APIKey, 5*time.Minute)
+	if err != nil {
+		runErr = fmt.Errorf("warmup failed: %w", err)
+		return
+	}
+
+	warmupEnd := time.Now().UnixMilli()
+	e.publish(runID, "", ar.nextSeq(), warmupEnd, model.EventModelWarmupFinished, map[string]any{
+		"durationMs": warmupEnd - warmupStart,
+		"modelFile":  warmupResult.ModelFile,
+		"quant":      warmupResult.Quant,
+		"gpuBackend": warmupResult.GPUBackend,
+		"gpuModel":   warmupResult.GPUModel,
+	})
+
+	// Update run with metadata
+	metadataUpdate := model.Run{
+		ID:          runID,
+		Status:      model.RunRunning,
+		ModelFile:   warmupResult.ModelFile,
+		Quant:       warmupResult.Quant,
+		QuantTier:   warmupResult.QuantTier,
+		QuantSource: warmupResult.QuantSource,
+		ContextSize: warmupResult.ContextSize,
+		GPUBackend:  warmupResult.GPUBackend,
+		GPUModel:    warmupResult.GPUModel,
+		GPUCount:    warmupResult.GPUCount,
+		VRAMTotalMB: warmupResult.VRAMTotalMB,
+	}
+	if err := e.store.UpdateRunMetadata(metadataUpdate); err != nil {
+		slog.Error("update run metadata", "run_id", runID, "err", err)
 	}
 
 	for _, scenarioID := range req.ScenarioIDs {

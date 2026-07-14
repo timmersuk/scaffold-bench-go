@@ -106,23 +106,6 @@ func (r *fileRuntimeConfig) load() error {
 	return nil
 }
 
-// Save writes the current runtime configuration to disk.
-func (r *fileRuntimeConfig) save() error {
-	r.mu.RLock()
-	data := r.data
-	r.mu.RUnlock()
-
-	bytes, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(filepath.Dir(r.path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(r.path, bytes, 0o644)
-}
-
 // Snapshot returns a defensive copy of the current runtime configuration data.
 func (r *fileRuntimeConfig) Snapshot() RuntimeConfigData {
 	r.mu.RLock()
@@ -193,7 +176,16 @@ func (r *fileRuntimeConfig) Apply(update RuntimeConfigData) error {
 		r.data.RemoteModels = models
 	}
 
-	return r.save()
+	bytes, err := json.MarshalIndent(r.data, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(r.path), 0o755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(r.path, bytes, 0o644)
 }
 
 // snapshotLocked returns a defensive copy of the current runtime configuration data.

@@ -35,7 +35,7 @@ export function getLivePoints(state: RunState): { total: number; max: number } {
 }
 
 export function getDisplayedPoints(state: RunState): { total: number; max: number } {
-  if (state.status === "running") return getLivePoints(state);
+  if (state.status === "running" || state.status === "warming_up") return getLivePoints(state);
   return { total: state.totalPoints, max: state.maxPoints };
 }
 
