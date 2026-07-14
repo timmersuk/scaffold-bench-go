@@ -82,3 +82,17 @@ _Avoid_: System info, hardware detection.
 **Warmup Phase**:
 A distinct Run phase (`warming_up` status) between run start and the first scenario. The readiness gate and metadata survey execute during this phase. It prevents model load time from contaminating scenario timing metrics.
 _Avoid_: Initialization, loading phase.
+
+## Agent Execution
+
+**Tool Execution Mode**:
+A per-Run setting (`sequential` or `parallel`) that controls how the agent executes batches of tool calls. In `sequential` mode, all calls run one at a time in order. In `parallel` mode, Parallel-Safe Tools run concurrently while mutating tools run sequentially, preserving the model's intended ordering.
+_Avoid_: Concurrency mode, execution strategy.
+
+**Parallel-Safe Tool**:
+A tool that can be executed concurrently without side effects or race conditions. In this codebase, only `read` and `ls` are Parallel-Safe. Mutating tools (`edit`, `write`) and arbitrary-command tools (`bash`) are excluded to prevent conflicts and maintain predictability.
+_Avoid_: Read-only tool, safe tool.
+
+**Tool Call Hook**:
+A middleware function invoked before or after tool execution. `beforeToolCall` can inspect and optionally block a call; `afterToolCall` can inspect the result and optionally override it. Hooks are configured at the agent level, not the runner level.
+_Avoid_: Tool middleware, execution interceptor.

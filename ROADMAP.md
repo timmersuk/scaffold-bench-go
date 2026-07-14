@@ -14,7 +14,7 @@ A single-binary Go + Vite port of [scaffold-bench](https://github.com/1337hero/s
 | Domain model & REST API | ✅ Designed | Core entities and `/api/*` routes defined in ADRs / issues |
 | SQLite schema & persistence | ✅ Done | Migrations, runs/scenario_runs/events tables, WAL |
 | Scenario manifest schema | ✅ Done | `docs/design/scenario-manifest.md`, YAML/JSON loader, Go evaluator interface |
-| Run engine & evaluator | 🚧 Partial | Core checks complete; `requires` enforcement and trace-semantic fixes landed (#24, #25). Native Go AST checks implemented for SB-25 (#14, ADR-0002). Remaining gaps: parallel tool execution (#17), preflight metadata (#18). |
+| Run engine & evaluator | 🚧 Partial | Core checks complete; `requires` enforcement and trace-semantic fixes landed (#24, #25). Native Go AST checks implemented for SB-25 (#14, ADR-0002). Parallel tool execution with hooks implemented (#17). Remaining gap: preflight metadata (#18). |
 | Scenarios ported | 🚧 In progress | SB-01 and SB-25 ported and validated against golden workspaces; remaining 48 scenarios not started |
 | Frontend wiring | 🚧 Partial | `/api/scenarios`, `/api/models`, and SSE run stream are wired; Dashboard view implemented in PR #29. RunHistory implemented and reuses Dashboard three-pane layout. OneShotLab remains placeholder. |
 | One-shot lab | ❌ Not started | API stubs only (`/api/oneshot/*` return empty) |
@@ -39,7 +39,7 @@ All closed design issues from the wayfinder map:
 ### Run engine & evaluator
 
 - [x] [#14 Add an AST plugin boundary for ast_* rubric checks](https://github.com/timmersuk/scaffold-bench-go/issues/14) — implemented as native Go checks for SB-25 (ADR-0002)
-- [ ] [#17 Support parallel tool execution and tool-call hooks](https://github.com/timmersuk/scaffold-bench-go/issues/17)
+- [x] [#17 Support parallel tool execution and tool-call hooks](https://github.com/timmersuk/scaffold-bench-go/issues/17) — parallel execution for read/ls tools with partitioning, concurrency limit of 8, and beforeToolCall/afterToolCall hooks
 - [ ] [#18 Add run metadata and preflight checks](https://github.com/timmersuk/scaffold-bench-go/issues/18)
 - [x] [#24 Fix trace_read_before_edit to require an edit/write](https://github.com/timmersuk/scaffold-bench-go/issues/24)
 - [x] [#25 Runner engine does not enforce manifest requires list](https://github.com/timmersuk/scaffold-bench-go/issues/25)

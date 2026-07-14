@@ -14,17 +14,19 @@ const DefaultMaxTurns = 20
 
 // Config controls a single agent run.
 type Config struct {
-	WorkDir      string
-	Prompt       string
-	Endpoint     string
-	Model        string
-	APIKey       string
-	SystemPrompt string
-	Harness      string
-	Timeout      time.Duration
-	MaxTurns     int
-	OnEvent      func(model.RuntimeEvent)
-	Caller       Caller
+	WorkDir        string
+	Prompt         string
+	Endpoint       string
+	Model          string
+	APIKey         string
+	SystemPrompt   string
+	Harness        string
+	Timeout        time.Duration
+	MaxTurns       int
+	ToolExecution  ToolExecutionMode
+	ToolHooks      *ToolExecutionHooks
+	OnEvent        func(model.RuntimeEvent)
+	Caller         Caller
 }
 
 // Output is the result of an agent run.
@@ -47,6 +49,9 @@ func Run(ctx context.Context, cfg Config) Output {
 	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = 10 * time.Minute
+	}
+	if cfg.ToolExecution == "" {
+		cfg.ToolExecution = ToolExecutionSequential
 	}
 	caller := cfg.Caller
 	if caller == nil {
@@ -142,7 +147,7 @@ func Run(ctx context.Context, cfg Config) Output {
 			emit(cfg.OnEvent, model.RuntimeEvent{Type: model.EventToolCall, Call: &tc})
 		}
 
-		results, err := ExecuteToolBatch(ctx, openAICalls, cfg.WorkDir)
+		results, err := ExecuteToolBatch(ctx, openAICalls, cfg.WorkDir, cfg.ToolExecution, cfg.ToolHooks)
 		if err != nil {
 			return finishRun(state, startedAt, fmt.Sprintf("CRASH: tool execution: %s", err))
 		}
