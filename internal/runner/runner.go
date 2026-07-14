@@ -29,13 +29,14 @@ const defaultBuildTimeout = 60 * time.Second
 
 // StartRequest is the payload for POST /api/runs.
 type StartRequest struct {
-	ScenarioIDs  []string `json:"scenarioIds"`
-	ModelID      string   `json:"modelId,omitempty"`
-	Endpoint     string   `json:"endpoint,omitempty"`
-	APIKey       string   `json:"apiKey,omitempty"`
-	SystemPrompt string   `json:"systemPrompt,omitempty"`
-	Harness      string   `json:"harness,omitempty"`
-	TimeoutMs    int      `json:"timeoutMs,omitempty"`
+	ScenarioIDs   []string          `json:"scenarioIds"`
+	ModelID       string            `json:"modelId,omitempty"`
+	Endpoint      string            `json:"endpoint,omitempty"`
+	APIKey        string            `json:"apiKey,omitempty"`
+	SystemPrompt  string            `json:"systemPrompt,omitempty"`
+	Harness       string            `json:"harness,omitempty"`
+	TimeoutMs     int               `json:"timeoutMs,omitempty"`
+	ToolExecution agent.ToolExecutionMode `json:"toolExecution,omitempty"`
 }
 
 // Engine orchestrates benchmark runs.
@@ -398,14 +399,15 @@ func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest
 	}
 
 	agentCfg := agent.Config{
-		WorkDir:      workDir,
-		Prompt:       scenario.Prompt,
-		Endpoint:     endpoint,
-		Model:        req.ModelID,
-		APIKey:       req.APIKey,
-		SystemPrompt: req.SystemPrompt,
-		Harness:      req.Harness,
-		Timeout:      timeout,
+		WorkDir:       workDir,
+		Prompt:        scenario.Prompt,
+		Endpoint:      endpoint,
+		Model:         req.ModelID,
+		APIKey:        req.APIKey,
+		SystemPrompt:  req.SystemPrompt,
+		Harness:       req.Harness,
+		Timeout:       timeout,
+		ToolExecution: req.ToolExecution,
 		OnEvent: func(ev model.RuntimeEvent) {
 			e.publish(runID, scenario.ID, ar.nextSeq(), time.Now().UnixMilli(), ev.Type, runtimeEventPayload(ev))
 		},

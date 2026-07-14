@@ -11,14 +11,57 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
-	outputCap            = 8192
-	defaultBashTimeoutMs = 5000
-	maxBashTimeoutMs     = 10000
+	outputCap                  = 8192
+	defaultBashTimeoutMs       = 5000
+	maxBashTimeoutMs           = 10000
+	maxParallelSafeToolCalls   = 8
 )
+
+// ToolExecutionMode controls how tool batches are executed.
+type ToolExecutionMode string
+
+const (
+	ToolExecutionSequential ToolExecutionMode = "sequential"
+	ToolExecutionParallel   ToolExecutionMode = "parallel"
+)
+
+// BeforeToolCallInput is passed to the beforeToolCall hook.
+type BeforeToolCallInput struct {
+	ID         string
+	Name       string
+	RawArgs    string
+	ParsedArgs any
+	WorkDir    string
+}
+
+// BeforeToolCallResult is returned by the beforeToolCall hook.
+type BeforeToolCallResult struct {
+	Block  bool
+	Reason string
+}
+
+// AfterToolCallInput is passed to the afterToolCall hook.
+type AfterToolCallInput struct {
+	BeforeToolCallInput
+	Result string
+}
+
+// BeforeToolCallFunc is the signature for the beforeToolCall hook.
+type BeforeToolCallFunc func(ctx context.Context, input BeforeToolCallInput) (*BeforeToolCallResult, error)
+
+// AfterToolCallFunc is the signature for the afterToolCall hook.
+type AfterToolCallFunc func(ctx context.Context, input AfterToolCallInput) (*string, error)
+
+// ToolExecutionHooks configures middleware for tool execution.
+type ToolExecutionHooks struct {
+	BeforeToolCall BeforeToolCallFunc
+	AfterToolCall  AfterToolCallFunc
+}
 
 // ToolDefinition describes one tool for the model.
 type ToolDefinition struct {
@@ -140,26 +183,132 @@ Rules:
 	}
 }
 
-// ExecuteTool executes a single tool call and returns its string result.
-func ExecuteTool(ctx context.Context, name string, rawArgs string, cwd string) (string, error) {
+// ExecuteTool executes a single tool call with optional hooks and returns its string result.
+func ExecuteTool(ctx context.Context, name string, rawArgs string, cwd string, callID string, hooks *ToolExecutionHooks) (string, error) {
 	handler, ok := toolRegistry[name]
 	if !ok {
 		return "", fmt.Errorf("unknown tool %q", name)
 	}
-	return handler.run(ctx, json.RawMessage(rawArgs), cwd)
+
+	var parsedArgs any
+	_ = json.Unmarshal(json.RawMessage(rawArgs), &parsedArgs)
+
+	input := BeforeToolCallInput{
+		ID:         callID,
+		Name:       name,
+		RawArgs:    rawArgs,
+		ParsedArgs: parsedArgs,
+		WorkDir:    cwd,
+	}
+
+	if hooks != nil && hooks.BeforeToolCall != nil {
+		result, err := hooks.BeforeToolCall(ctx, input)
+		if err != nil {
+			return "", err
+		}
+		if result != nil && result.Block {
+			reason := result.Reason
+			if reason == "" {
+				reason = "tool execution blocked"
+			}
+			return "", errors.New(reason)
+		}
+	}
+
+	result, err := handler.run(ctx, json.RawMessage(rawArgs), cwd)
+
+	if hooks != nil && hooks.AfterToolCall != nil {
+		afterInput := AfterToolCallInput{
+			BeforeToolCallInput: input,
+			Result:              result,
+		}
+		override, hookErr := hooks.AfterToolCall(ctx, afterInput)
+		if hookErr != nil {
+			return "", hookErr
+		}
+		if override != nil {
+			result = *override
+		}
+	}
+
+	return result, err
 }
 
-// ExecuteToolBatch runs tool calls sequentially and returns their results.
-func ExecuteToolBatch(ctx context.Context, calls []OpenAIToolCall, cwd string) ([]string, error) {
-	results := make([]string, len(calls))
-	for i, call := range calls {
-		res, err := ExecuteTool(ctx, call.Function.Name, call.Function.Arguments, cwd)
-		if err != nil {
-			res = fmt.Sprintf("error: %s", err.Error())
+// ExecuteToolBatch runs tool calls according to the execution mode and returns their results.
+// In sequential mode, all calls run one at a time.
+// In parallel mode, parallel-safe tools (read, ls) run concurrently, while mutating tools run sequentially.
+func ExecuteToolBatch(ctx context.Context, calls []OpenAIToolCall, cwd string, mode ToolExecutionMode, hooks *ToolExecutionHooks) ([]string, error) {
+	if mode != ToolExecutionParallel {
+		results := make([]string, len(calls))
+		for i, call := range calls {
+			res, err := ExecuteTool(ctx, call.Function.Name, call.Function.Arguments, cwd, call.ID, hooks)
+			if err != nil {
+				res = fmt.Sprintf("error: %s", err.Error())
+			}
+			results[i] = res
 		}
-		results[i] = res
+		return results, nil
 	}
+
+	results := make([]string, len(calls))
+	i := 0
+	for i < len(calls) {
+		if !isParallelSafeTool(calls[i].Function.Name) {
+			res, err := ExecuteTool(ctx, calls[i].Function.Name, calls[i].Function.Arguments, cwd, calls[i].ID, hooks)
+			if err != nil {
+				res = fmt.Sprintf("error: %s", err.Error())
+			}
+			results[i] = res
+			i++
+			continue
+		}
+
+		end := i + 1
+		for end < len(calls) && isParallelSafeTool(calls[end].Function.Name) {
+			end++
+		}
+
+		segment := calls[i:end]
+		segmentResults := executeSafeBatchParallel(ctx, segment, cwd, hooks)
+		for segIdx, res := range segmentResults {
+			results[i+segIdx] = res
+		}
+		i = end
+	}
+
 	return results, nil
+}
+
+func isParallelSafeTool(name string) bool {
+	return name == "read" || name == "ls"
+}
+
+func executeSafeBatchParallel(ctx context.Context, batch []OpenAIToolCall, cwd string, hooks *ToolExecutionHooks) []string {
+	results := make([]string, len(batch))
+	if len(batch) == 0 {
+		return results
+	}
+
+	sem := make(chan struct{}, maxParallelSafeToolCalls)
+	var wg sync.WaitGroup
+
+	for i, call := range batch {
+		wg.Add(1)
+		go func(idx int, c OpenAIToolCall) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			res, err := ExecuteTool(ctx, c.Function.Name, c.Function.Arguments, cwd, c.ID, hooks)
+			if err != nil {
+				res = fmt.Sprintf("error: %s", err.Error())
+			}
+			results[idx] = res
+		}(i, call)
+	}
+
+	wg.Wait()
+	return results
 }
 
 var toolRegistry = map[string]toolHandler{
