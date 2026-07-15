@@ -10,8 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/timmersuk/scaffold-bench-go/internal/agent"
 	"github.com/timmersuk/scaffold-bench-go/internal/api"
 	"github.com/timmersuk/scaffold-bench-go/internal/config"
+	"github.com/timmersuk/scaffold-bench-go/internal/oneshot"
 	"github.com/timmersuk/scaffold-bench-go/internal/realtime"
 	"github.com/timmersuk/scaffold-bench-go/internal/runner"
 	"github.com/timmersuk/scaffold-bench-go/internal/storage"
@@ -55,13 +57,17 @@ func run() error {
 	registry := runner.NewRegistry()
 	engine := runner.NewEngine(store, events, cfg, registry)
 
+	caller := agent.NewHTTPCaller()
+	oneshotEngine := oneshot.NewEngine(store, events, cfg, caller)
+
 	router, err := api.NewRouter(api.Config{
-		Store:     store,
-		Events:    events,
-		Runner:    engine,
-		Registry:  registry,
-		AppConfig: cfg,
-		BuildID:   BuildID,
+		Store:         store,
+		Events:        events,
+		Runner:        engine,
+		OneshotRunner: oneshotEngine,
+		Registry:      registry,
+		AppConfig:     cfg,
+		BuildID:       BuildID,
 	})
 	if err != nil {
 		return err

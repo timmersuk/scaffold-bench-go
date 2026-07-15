@@ -190,3 +190,76 @@ type WorkspaceArchiveEntry struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
 }
+
+// OneshotRunStatus is the lifecycle status of a one-shot run.
+type OneshotRunStatus string
+
+const (
+	OneshotRunRunning OneshotRunStatus = "running"
+	OneshotRunDone    OneshotRunStatus = "done"
+	OneshotRunFailed  OneshotRunStatus = "failed"
+	OneshotRunStopped OneshotRunStatus = "stopped"
+)
+
+// OneshotPromptStatus is the result status of an individual prompt execution.
+type OneshotPromptStatus string
+
+const (
+	OneshotPromptPending OneshotPromptStatus = "pending"
+	OneshotPromptRunning OneshotPromptStatus = "running"
+	OneshotPromptDone    OneshotPromptStatus = "done"
+	OneshotPromptFailed  OneshotPromptStatus = "failed"
+	OneshotPromptStopped OneshotPromptStatus = "stopped"
+)
+
+// Oneshot event types produced by the one-shot engine.
+const (
+	EventOneshotRunStarted      = "oneshot_run_started"
+	EventOneshotWarmupStarted   = "oneshot_warmup_started"
+	EventOneshotWarmupFinished  = "oneshot_warmup_finished"
+	EventOneshotTestStarted     = "oneshot_test_started"
+	EventOneshotDelta           = "oneshot_delta"
+	EventOneshotTestFinished    = "oneshot_test_finished"
+	EventOneshotRunFinished     = "oneshot_run_finished"
+	EventOneshotRunStopped      = "oneshot_run_stopped"
+	EventOneshotRunFailed       = "oneshot_run_failed"
+)
+
+// OneshotRun is a one-shot lab run.
+type OneshotRun struct {
+	ID         string           `json:"id"`
+	StartedAt  int64            `json:"startedAt"`
+	FinishedAt *int64           `json:"finishedAt,omitempty"`
+	Status     OneshotRunStatus `json:"status"`
+	Model      string           `json:"model,omitempty"`
+	Endpoint   string           `json:"endpoint,omitempty"`
+	PromptIDs  []string         `json:"promptIds"`
+	Error      string           `json:"error,omitempty"`
+}
+
+// OneshotResult is the outcome of executing a single LabPrompt.
+type OneshotResult struct {
+	PromptID        string              `json:"promptId"`
+	RunID           string              `json:"runId"`
+	Model           string              `json:"model,omitempty"`
+	StartedAt       *int64              `json:"startedAt,omitempty"`
+	FinishedAt      *int64              `json:"finishedAt,omitempty"`
+	Status          OneshotPromptStatus `json:"status"`
+	Output          string              `json:"output,omitempty"`
+	FinishReason    string              `json:"finishReason,omitempty"`
+	WallTimeMs      *int64              `json:"wallTimeMs,omitempty"`
+	FirstTokenMs    *int64              `json:"firstTokenMs,omitempty"`
+	PromptTokens    *int                `json:"promptTokens,omitempty"`
+	CompletionTokens *int               `json:"completionTokens,omitempty"`
+	ArtifactPath    string              `json:"artifactPath,omitempty"`
+	Error           string              `json:"error,omitempty"`
+	HasArtifact     bool                `json:"hasArtifact"`
+}
+
+// LabPrompt is a creative coding challenge for the One-Shot Lab.
+type LabPrompt struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Category string `json:"category"`
+	Prompt   string `json:"-"`
+}

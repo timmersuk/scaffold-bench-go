@@ -81,14 +81,39 @@ export interface RuntimeConfig {
 
 export interface OneshotTestSummary {
   id: string;
-  name: string;
+  title: string;
+  category: string;
+  prompt: string;
+}
+
+export interface OneshotResult {
+  promptId: string;
+  runId: string;
+  model?: string;
+  startedAt?: number;
+  finishedAt?: number;
+  status: "pending" | "running" | "done" | "failed" | "stopped";
+  output?: string;
+  finishReason?: string;
+  wallTimeMs?: number;
+  firstTokenMs?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  artifactPath?: string;
+  error?: string;
+  hasArtifact: boolean;
 }
 
 export interface OneshotLatestRun {
   runId: string;
   status: string;
-  model: string;
-  results: unknown[];
+  model?: string;
+  endpoint?: string;
+  promptIds: string[];
+  startedAt: number;
+  finishedAt?: number;
+  error?: string;
+  results: OneshotResult[];
 }
 
 export type PersistedEventBase = { seq: number; ts: number };
