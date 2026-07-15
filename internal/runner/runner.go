@@ -213,7 +213,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, req StartRequest,
 		"endpoint": endpoint,
 	})
 
-	warmupResult, err := performWarmup(ctx, endpoint, req.ModelID, req.APIKey, 5*time.Minute)
+	warmupResult, err := PerformWarmup(ctx, endpoint, req.ModelID, req.APIKey, 5*time.Minute)
 	if err != nil {
 		runErr = fmt.Errorf("warmup failed: %w", err)
 		return

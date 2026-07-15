@@ -83,6 +83,20 @@ _Avoid_: System info, hardware detection.
 A distinct Run phase (`warming_up` status) between run start and the first scenario. The readiness gate and metadata survey execute during this phase. It prevents model load time from contaminating scenario timing metrics.
 _Avoid_: Initialization, loading phase.
 
+## One-Shot Lab
+
+**LabPrompt**:
+A creative coding challenge defined as a markdown file with frontmatter (`title`, `category`), used in the One-Shot Lab. Produces a single HTML artifact; not scored.
+_Avoid_: Test, prompt, challenge.
+
+**LabPrompt Result**:
+The outcome of executing a LabPrompt against a Model. Stores the raw output, extracted HTML artifact, token counts, and timing metrics. Uses latest-per-prompt semantics: rerunning a LabPrompt replaces its previous result without affecting other prompts' results.
+_Avoid_: Test result, output.
+
+**One-Shot Run**:
+An execution of one or more LabPrompts against a single Model. Unscored, single-turn, no tools or agent loop. Produces HTML artifacts rendered in the browser.
+_Avoid_: One-shot test, vibe check.
+
 ## Agent Execution
 
 **Tool Execution Mode**:

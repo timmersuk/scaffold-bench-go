@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/timmersuk/scaffold-bench-go/internal/config"
 	"github.com/timmersuk/scaffold-bench-go/internal/model"
+	"github.com/timmersuk/scaffold-bench-go/internal/oneshot"
 	"github.com/timmersuk/scaffold-bench-go/internal/realtime"
 	"github.com/timmersuk/scaffold-bench-go/internal/runner"
 	"github.com/timmersuk/scaffold-bench-go/internal/storage"
@@ -28,13 +30,14 @@ import (
 
 // Config holds the dependencies needed by the HTTP router.
 type Config struct {
-	Store     *storage.Store
-	Events    *realtime.Hub
-	Runner    Runner
-	Registry  *runner.Registry
-	AppConfig config.Config
-	BuildID   string
-	Frontend  fs.FS
+	Store        *storage.Store
+	Events       *realtime.Hub
+	Runner       Runner
+	OneshotRunner OneshotRunner
+	Registry     *runner.Registry
+	AppConfig    config.Config
+	BuildID      string
+	Frontend     fs.FS
 }
 
 // Runner orchestrates benchmark runs.
@@ -42,6 +45,14 @@ type Runner interface {
 	Start(req runner.StartRequest) (string, error)
 	Stop(runID string) error
 	ActiveRunID() (string, bool)
+}
+
+// OneshotRunner orchestrates one-shot lab runs.
+type OneshotRunner interface {
+	Start(req oneshot.StartRequest) (string, error)
+	Stop(runID string) error
+	ActiveRunID() (string, bool)
+	ListPrompts() ([]oneshot.PromptSummary, error)
 }
 
 // NewRouter builds the application http.Handler.
@@ -54,6 +65,9 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	}
 	if cfg.Runner == nil {
 		return nil, errors.New("runner is required")
+	}
+	if cfg.OneshotRunner == nil {
+		return nil, errors.New("oneshot runner is required")
 	}
 	if cfg.Registry == nil {
 		return nil, errors.New("registry is required")
@@ -68,13 +82,14 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	}
 
 	srv := &server{
-		store:     cfg.Store,
-		events:    cfg.Events,
-		runner:    cfg.Runner,
-		registry:  cfg.Registry,
-		appConfig: cfg.AppConfig,
-		buildID:   cfg.BuildID,
-		frontend:  frontend,
+		store:         cfg.Store,
+		events:        cfg.Events,
+		runner:        cfg.Runner,
+		oneshotRunner: cfg.OneshotRunner,
+		registry:      cfg.Registry,
+		appConfig:     cfg.AppConfig,
+		buildID:       cfg.BuildID,
+		frontend:      frontend,
 		modelsCache: &modelsCache{
 			ttl: cfg.AppConfig.RemoteModelCacheTTLSeconds(),
 		},
@@ -90,7 +105,10 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	apiMux.HandleFunc("/runs", srv.handleRuns)
 	apiMux.HandleFunc("/runs/", srv.handleRuns)
 	apiMux.HandleFunc("/oneshot/tests", srv.withMethod(http.MethodGet, srv.handleOneshotTests))
-	apiMux.HandleFunc("/oneshot/runs/", srv.withMethod(http.MethodGet, srv.handleOneshotRuns))
+	apiMux.HandleFunc("/oneshot/runs/latest", srv.withMethod(http.MethodGet, srv.handleOneshotLatestRun))
+	apiMux.HandleFunc("/oneshot/runs", srv.handleOneshotRuns)
+	apiMux.HandleFunc("/oneshot/runs/", srv.handleOneshotRuns)
+	apiMux.HandleFunc("/oneshot/artifacts/", srv.withMethod(http.MethodGet, srv.handleOneshotArtifact))
 	apiMux.HandleFunc("/report/data", srv.withMethod(http.MethodGet, srv.handleReportData))
 
 	mux := http.NewServeMux()
@@ -102,15 +120,16 @@ func NewRouter(cfg Config) (http.Handler, error) {
 }
 
 type server struct {
-	store       *storage.Store
-	events      *realtime.Hub
-	runner      Runner
-	registry    *runner.Registry
-	appConfig   config.Config
-	buildID     string
-	frontend    fs.FS
-	modelsCache *modelsCache
-	httpClient  *http.Client
+	store         *storage.Store
+	events        *realtime.Hub
+	runner        Runner
+	oneshotRunner OneshotRunner
+	registry      *runner.Registry
+	appConfig     config.Config
+	buildID       string
+	frontend      fs.FS
+	modelsCache   *modelsCache
+	httpClient    *http.Client
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -477,11 +496,179 @@ func (s *server) handleGetRun(w http.ResponseWriter, r *http.Request, runID stri
 }
 
 func (s *server) handleOneshotTests(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, []map[string]any{})
+	prompts, err := s.oneshotRunner.ListPrompts()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "list prompts: " + err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, prompts)
 }
 
 func (s *server) handleOneshotRuns(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	path := strings.TrimPrefix(r.URL.Path, "/oneshot/runs")
+	path = strings.TrimPrefix(path, "/")
+
+	if r.Method == http.MethodPost && path == "" {
+		s.startOneshotRun(w, r)
+		return
+	}
+
+	if r.Method == http.MethodPost && strings.HasSuffix(path, "/stop") {
+		runID := strings.TrimSuffix(path, "/stop")
+		s.stopOneshotRun(w, r, runID)
+		return
+	}
+
+	if r.Method == http.MethodGet && strings.HasSuffix(path, "/stream") {
+		runID := strings.TrimSuffix(path, "/stream")
+		s.streamOneshotRun(w, r, runID)
+		return
+	}
+
+	writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+}
+
+func (s *server) startOneshotRun(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ModelID   string   `json:"modelId"`
+		PromptIDs []string `json:"promptIds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid request body"})
+		return
+	}
+	if req.ModelID == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "modelId is required"})
+		return
+	}
+	if len(req.PromptIDs) == 0 {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "promptIds is required"})
+		return
+	}
+
+	oneshotReq := oneshot.StartRequest{
+		ModelID:   req.ModelID,
+		PromptIDs: req.PromptIDs,
+	}
+	runID, err := s.oneshotRunner.Start(oneshotReq)
+	if err != nil {
+		if strings.Contains(err.Error(), "already in progress") {
+			writeJSON(w, http.StatusConflict, errorResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"runId": runID})
+}
+
+func (s *server) stopOneshotRun(w http.ResponseWriter, r *http.Request, runID string) {
+	if err := s.oneshotRunner.Stop(runID); err != nil {
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "runId": runID, "status": "stopping"})
+}
+
+func (s *server) streamOneshotRun(w http.ResponseWriter, r *http.Request, runID string) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "streaming not supported"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	ch, unsub := s.events.Subscribe()
+	defer unsub()
+
+	fromSeq := int64(-1)
+	if q := r.URL.Query().Get("fromSeq"); q != "" {
+		if v, err := strconv.ParseInt(q, 10, 64); err == nil {
+			fromSeq = v
+		}
+	}
+
+	events, err := s.store.ListOneshotEvents(runID, fromSeq)
+	if err != nil {
+		slog.Error("failed to list oneshot events", "run_id", runID, "err", err)
+		fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
+		flusher.Flush()
+		return
+	}
+
+	for _, e := range events {
+		if e.RunID != runID {
+			continue
+		}
+		data, _ := json.Marshal(e)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+	}
+	flusher.Flush()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case e, ok := <-ch:
+			if !ok {
+				return
+			}
+			if e.RunID != runID {
+				continue
+			}
+			data, _ := json.Marshal(e)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+
+			if e.Type == model.EventOneshotRunFinished || e.Type == model.EventOneshotRunFailed || e.Type == model.EventOneshotRunStopped {
+				return
+			}
+		}
+	}
+}
+
+func (s *server) handleOneshotLatestRun(w http.ResponseWriter, r *http.Request) {
+	run, found, err := s.store.GetLatestOneshotRun()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+	if !found {
+		writeJSON(w, http.StatusOK, nil)
+		return
+	}
+
+	results, err := s.store.GetAllOneshotResults()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, oneshotLatestRunResponse{
+		RunID:      run.ID,
+		Status:     string(run.Status),
+		Model:      run.Model,
+		Endpoint:   run.Endpoint,
+		PromptIDs:  run.PromptIDs,
+		StartedAt:  run.StartedAt,
+		FinishedAt: run.FinishedAt,
+		Error:      run.Error,
+		Results:    results,
+	})
+}
+
+func (s *server) handleOneshotArtifact(w http.ResponseWriter, r *http.Request) {
+	promptID := strings.TrimPrefix(r.URL.Path, "/oneshot/artifacts/")
+	if promptID == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "promptId is required"})
+		return
+	}
+
+	artifactPath := filepath.Join(s.appConfig.DataDir, "artifacts", "oneshot", promptID+".html")
+	http.ServeFile(w, r, artifactPath)
 }
 
 func (s *server) handleReportData(w http.ResponseWriter, r *http.Request) {
@@ -798,6 +985,18 @@ type runtimeConfigResponse struct {
 	RemoteModelCacheTTLSeconds int      `json:"remoteModelCacheTTLSeconds"`
 }
 
+type oneshotLatestRunResponse struct {
+	RunID      string                `json:"runId"`
+	Status     string                `json:"status"`
+	Model      string                `json:"model,omitempty"`
+	Endpoint   string                `json:"endpoint,omitempty"`
+	PromptIDs  []string              `json:"promptIds"`
+	StartedAt  int64                 `json:"startedAt"`
+	FinishedAt *int64                `json:"finishedAt,omitempty"`
+	Error      string                `json:"error,omitempty"`
+	Results    []model.OneshotResult `json:"results"`
+}
+
 type updateRuntimeConfigRequest struct {
 	LocalEndpoint              string   `json:"localEndpoint,omitempty"`
 	RemoteEndpoint             string   `json:"remoteEndpoint,omitempty"`
@@ -910,6 +1109,12 @@ type responseWriterWithStatus struct {
 func (w *responseWriterWithStatus) WriteHeader(statusCode int) {
 	w.status = statusCode
 	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *responseWriterWithStatus) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

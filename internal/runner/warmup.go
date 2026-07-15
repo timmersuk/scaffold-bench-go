@@ -59,8 +59,8 @@ type ModelInfo struct {
 	MaxModelLen *int   `json:"max_model_len,omitempty"`
 }
 
-// performWarmup sends a minimal completion request to warm up the model and extract metadata.
-func performWarmup(ctx context.Context, endpoint, modelID, apiKey string, timeout time.Duration) (*WarmupResult, error) {
+// PerformWarmup sends a minimal completion request to warm up the model and extract metadata.
+func PerformWarmup(ctx context.Context, endpoint, modelID, apiKey string, timeout time.Duration) (*WarmupResult, error) {
 	if timeout == 0 {
 		timeout = 5 * time.Minute
 	}

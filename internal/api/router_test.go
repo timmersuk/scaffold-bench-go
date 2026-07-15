@@ -11,6 +11,7 @@ import (
 
 	"github.com/timmersuk/scaffold-bench-go/internal/config"
 	"github.com/timmersuk/scaffold-bench-go/internal/model"
+	"github.com/timmersuk/scaffold-bench-go/internal/oneshot"
 	"github.com/timmersuk/scaffold-bench-go/internal/realtime"
 	"github.com/timmersuk/scaffold-bench-go/internal/runner"
 	"github.com/timmersuk/scaffold-bench-go/internal/storage"
@@ -39,7 +40,25 @@ func (f *fakeRunner) ActiveRunID() (string, bool) {
 	return "", false
 }
 
-func testDependencies(tb testing.TB) (*storage.Store, *realtime.Hub, *runner.Registry, *fakeRunner) {
+type fakeOneshotRunner struct{}
+
+func (f *fakeOneshotRunner) Start(req oneshot.StartRequest) (string, error) {
+	return "oneshot-123", nil
+}
+
+func (f *fakeOneshotRunner) Stop(runID string) error {
+	return nil
+}
+
+func (f *fakeOneshotRunner) ActiveRunID() (string, bool) {
+	return "", false
+}
+
+func (f *fakeOneshotRunner) ListPrompts() ([]oneshot.PromptSummary, error) {
+	return []oneshot.PromptSummary{}, nil
+}
+
+func testDependencies(tb testing.TB) (*storage.Store, *realtime.Hub, *runner.Registry, *fakeRunner, *fakeOneshotRunner) {
 	tb.Helper()
 	store, err := storage.Open(tb.TempDir() + "/router.db")
 	if err != nil {
@@ -50,20 +69,21 @@ func testDependencies(tb testing.TB) (*storage.Store, *realtime.Hub, *runner.Reg
 		tb.Fatalf("migrate: %v", err)
 	}
 	tb.Cleanup(func() { store.Close() })
-	return store, realtime.NewHub(), runner.NewRegistry(), &fakeRunner{}
+	return store, realtime.NewHub(), runner.NewRegistry(), &fakeRunner{}, &fakeOneshotRunner{}
 }
 
 func TestStartRunEndpoint(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
 		RemoteModels: []string{"shared-model", "dynamic-only", "static-only"},
 	})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -99,16 +119,17 @@ func TestStartRunEndpoint(t *testing.T) {
 }
 
 func TestModelsEndpointRemoteDiscoveryFallsBackToStatic(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
 		RemoteModels: []string{"remote-fallback"},
 	})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -155,16 +176,17 @@ func TestModelsEndpointReusesHTTPClientForLocalDiscovery(t *testing.T) {
 	}))
 	defer local.Close()
 
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
 		LocalEndpoint: local.URL,
 	})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -213,17 +235,18 @@ func TestModelsEndpointReusesHTTPClientForRemoteDiscovery(t *testing.T) {
 	}))
 	defer remote.Close()
 
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
 		RemoteEndpoint: remote.URL,
 		RemoteModels:   []string{"remote-model-b"},
 	})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -268,18 +291,19 @@ func TestModelsEndpointDiscoversLocalAndRemote(t *testing.T) {
 	}))
 	defer local.Close()
 
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
 		LocalEndpoint:  local.URL,
 		RemoteEndpoint: "https://api.remote.example.com",
 		RemoteModels:   []string{"remote-model-1", "remote-model-2"},
 	})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -332,16 +356,17 @@ func TestModelsEndpointDiscoversLocalAndRemote(t *testing.T) {
 }
 
 func TestRunEventsEndpointReturnsPersistedEvents(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
 		RemoteModels: []string{"local-model-a", "Local Model B", "alreadyfriend", "remote-model-1", "Friendly Remote"},
 	})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -383,16 +408,17 @@ func TestRunEventsEndpointReturnsPersistedEvents(t *testing.T) {
 }
 
 func TestModelsEndpointReturnsRemoteWhenLocalUnreachable(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
 		RemoteModels: []string{"remote-fallback"},
 	})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -429,17 +455,18 @@ func TestModelsEndpointReturnsRemoteWhenLocalUnreachable(t *testing.T) {
 }
 
 func TestModelsEndpointRemoteDoesNotRequireKeyWhenConfigured(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
 		RemoteModels: []string{"remote-model"},
 		RemoteAPIKey: "some-api-key",
 	})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -467,14 +494,15 @@ func TestModelsEndpointRemoteDoesNotRequireKeyWhenConfigured(t *testing.T) {
 }
 
 func TestListRunsEndpointReturnsRuns(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -521,14 +549,15 @@ func TestListRunsEndpointReturnsRuns(t *testing.T) {
 }
 
 func TestGetRunEndpointReturnsRunWithScenarios(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -615,7 +644,7 @@ func (m *mutableRuntimeConfig) ValidateEndpoints() error {
 }
 
 func TestGetConfigEndpoint(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := config.NewStaticRuntimeConfig(config.RuntimeConfigData{
 		LocalEndpoint:              "http://localhost:8080",
 		RemoteEndpoint:             "https://api.remote.example.com",
@@ -624,11 +653,12 @@ func TestGetConfigEndpoint(t *testing.T) {
 		RemoteModelCacheTTLSeconds: 30,
 	})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -664,16 +694,17 @@ func TestGetConfigEndpoint(t *testing.T) {
 }
 
 func TestUpdateConfigEndpoint(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	rc := newMutableRuntimeConfig(config.RuntimeConfigData{
 		LocalEndpoint: "http://localhost:8080",
 	})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -711,17 +742,18 @@ func TestUpdateConfigEndpoint(t *testing.T) {
 }
 
 func TestUpdateConfigRejectedWhenActive(t *testing.T) {
-	store, events, registry, fr := testDependencies(t)
+	store, events, registry, fr, fosr := testDependencies(t)
 	fr.activeID = "run-123"
 	rc := newMutableRuntimeConfig(config.RuntimeConfigData{
 		LocalEndpoint: "http://localhost:8080",
 	})
 	router, err := NewRouter(Config{
-		Store:     store,
-		Events:    events,
-		Runner:    fr,
-		Registry:  registry,
-		AppConfig: config.Config{Runtime: rc},
+		Store:         store,
+		Events:        events,
+		Runner:        fr,
+		OneshotRunner: fosr,
+		Registry:      registry,
+		AppConfig:     config.Config{Runtime: rc},
 	})
 	if err != nil {
 		t.Fatalf("new router: %v", err)

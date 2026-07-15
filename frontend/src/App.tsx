@@ -3,6 +3,7 @@ import { LayoutDashboard, History, FlaskConical, Settings as SettingsIcon } from
 import { Dashboard } from "./views/Dashboard";
 import { RunHistory } from "./views/RunHistory";
 import { RunDetailView } from "./views/RunDetailView";
+import { OneShotLab } from "./views/OneShotLab";
 import { Settings } from "./views/Settings";
 import { StartRunModal } from "./components/StartRunModal";
 import { ToastProvider } from "./components/Toaster";
@@ -136,21 +137,5 @@ function NavButton({
       {icon}
       {children}
     </button>
-  );
-}
-
-function OneShotLab({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="space-y-6">
-      <div className="rounded-xl border bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">One-shot Lab</h2>
-          <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
-            Back to Dashboard
-          </button>
-        </div>
-        <p className="mt-2 text-gray-600">Single-prompt model tests will appear here.</p>
-      </div>
-    </div>
   );
 }
