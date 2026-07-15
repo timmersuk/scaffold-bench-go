@@ -19,7 +19,7 @@ A single-binary Go + Vite port of [scaffold-bench](https://github.com/1337hero/s
 | Frontend wiring | 🚧 Partial | `/api/scenarios`, `/api/models`, and SSE run stream are wired; Dashboard view implemented in PR #29. RunHistory implemented and reuses Dashboard three-pane layout. OneShotLab fully implemented in PR #42. |
 | One-shot lab | ✅ Done | Full implementation: engine, API routes, frontend UI, 15 prompts, latest-per-prompt semantics (ADR-0007) |
 | Reports / leaderboard | ✅ Done | Full upstream parity: Solve %, Discipline %, Verify %, categories, tiers, context analysis, Pareto frontier, awards (PR #43) |
-| Frontend tests | ❌ Missing | No Vitest / React Testing Library setup |
+| Frontend tests | ✅ Done | Vitest + jsdom setup; 122 tests covering reducers, utilities, API client, and Dashboard smoke test |
 
 ## Decisions captured
 
@@ -66,7 +66,7 @@ All closed design issues from the wayfinder map:
 - [x] Wire RunHistory to stored runs and replay events into Dashboard three-pane layout
 - [x] Implement OneShotLab views and connect to `/api/oneshot/*`
 - [x] Implement Report leaderboard view with awards, totals, and model rankings (PR #43)
-- [ ] Add Vitest + React Testing Library and component tests
+- [x] Add Vitest + React Testing Library and component tests — 122 tests covering reducers, utilities, API client
 
 ### Infrastructure
 
