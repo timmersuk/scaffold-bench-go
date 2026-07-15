@@ -110,3 +110,39 @@ _Avoid_: Read-only tool, safe tool.
 **Tool Call Hook**:
 A middleware function invoked before or after tool execution. `beforeToolCall` can inspect and optionally block a call; `afterToolCall` can inspect the result and optionally override it. Hooks are configured at the agent level, not the runner level.
 _Avoid_: Tool middleware, execution interceptor.
+
+## Scenario Classification
+
+**Category**:
+The task kind axis for scenarios. One of seven closed values: `surgical-edit`, `scope-discipline`, `verify-and-repair`, `implementation`, `read-only-analysis`, `responsiveness`, `long-context`. Determines the leaderboard's category breakdown columns.
+_Avoid_: Task type, problem class.
+
+**Difficulty**:
+The cognitive-load axis for scenarios, orthogonal to Category. One of three closed values: `low`, `medium`, `high`. Determines the leaderboard's tier breakdown columns.
+_Avoid_: Complexity, challenge level.
+
+## Report & Leaderboard
+
+**Report**:
+The aggregated leaderboard data computed from all completed runs. Contains per-model metrics (Solve %, Discipline %, Verify %, token throughput, timing), per-category and per-tier breakdowns, context analysis, Pareto frontier, and awards.
+_Avoid_: Summary, analytics.
+
+**Solve %**:
+The primary leaderboard metric. The percentage of scenarios where a model achieved full correctness (3/3 on the correctness axis), restricted to 10pt rubrics. Reported with Wilson 95% confidence interval.
+_Avoid_: Pass rate, success rate.
+
+**Discipline %**:
+The process dimensions metric. The average percentage of (scope + pattern + verification + cleanup) / 7 across all scored scenarios for a model.
+_Avoid_: Process score, style score.
+
+**Verify %**:
+The share of mutating scored runs in which the model ran a passing test/typecheck command after changing code. Measured from the tool-call trace (behavioral fingerprint), independent of rubric points. Null when no eligible data.
+_Avoid_: Test rate, verification rate.
+
+**Pareto Frontier**:
+The set of models that are not dominated by any other model in both score and token efficiency. A model is on the frontier if no other model has both higher score and lower tokens.
+_Avoid_: Efficiency boundary, optimal set.
+
+**Context Cap Curve**:
+A retrospective solve-rate curve showing how many scenarios a model would solve if its context window were capped at various sizes (8k, 16k, 32k, 64k, 128k). Computed from runs as they actually executed, not re-run capped — a lower bound on capped performance.
+_Avoid_: Context sensitivity, window analysis.

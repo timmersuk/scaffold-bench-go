@@ -21,13 +21,13 @@ func (s *Store) GetRun(id string) (model.Run, error) {
 	var contextSize, gpuCount, vramTotal sql.NullInt64
 	err := s.db.QueryRow(`
 		SELECT id, started_at, finished_at, status, scenario_ids, runtime, runtime_kind,
-			endpoint, model, model_file, quant, quant_tier, quant_source, context_size,
+			endpoint, model, source, model_file, quant, quant_tier, quant_source, context_size,
 			harness, gpu_backend, gpu_model, gpu_count, vram_total_mb, host_thermal_note,
 			total_points, max_points, report_path, error
 		FROM runs WHERE id = ?
 	`, id).Scan(
 		&r.ID, &r.StartedAt, &finishedAt, &r.Status, &scenarioIDs, &r.Runtime, &r.RuntimeKind,
-		&endpoint, &r.Model, &modelFile, &quant, &quantTier, &quantSource, &contextSize,
+		&endpoint, &r.Model, &r.Source, &modelFile, &quant, &quantTier, &quantSource, &contextSize,
 		&harness, &gpuBackend, &gpuModel, &gpuCount, &vramTotal, &hostThermal,
 		&totalPoints, &maxPoints, &reportPath, &errMsg,
 	)
@@ -78,7 +78,7 @@ func (s *Store) GetRun(id string) (model.Run, error) {
 func (s *Store) ListRuns() ([]model.Run, error) {
 	rows, err := s.db.Query(`
 		SELECT id, started_at, finished_at, status, scenario_ids, runtime, runtime_kind,
-			endpoint, model, model_file, quant, quant_tier, quant_source, context_size,
+			endpoint, model, source, model_file, quant, quant_tier, quant_source, context_size,
 			harness, gpu_backend, gpu_model, gpu_count, vram_total_mb, host_thermal_note,
 			total_points, max_points, report_path, error
 		FROM runs
@@ -100,7 +100,7 @@ func (s *Store) ListRuns() ([]model.Run, error) {
 		var contextSize, gpuCount, vramTotal sql.NullInt64
 		if err := rows.Scan(
 			&r.ID, &r.StartedAt, &finishedAt, &r.Status, &scenarioIDs, &r.Runtime, &r.RuntimeKind,
-			&endpoint, &r.Model, &modelFile, &quant, &quantTier, &quantSource, &contextSize,
+			&endpoint, &r.Model, &r.Source, &modelFile, &quant, &quantTier, &quantSource, &contextSize,
 			&harness, &gpuBackend, &gpuModel, &gpuCount, &vramTotal, &hostThermal,
 			&totalPoints, &maxPoints, &reportPath, &errMsg,
 		); err != nil {
@@ -273,13 +273,13 @@ func (s *Store) InsertRun(r model.Run) error {
 	_, err := s.db.Exec(`
 		INSERT INTO runs (
 			id, started_at, finished_at, status, scenario_ids, runtime, runtime_kind,
-			endpoint, model, model_file, quant, quant_tier, quant_source, context_size,
+			endpoint, model, source, model_file, quant, quant_tier, quant_source, context_size,
 			harness, gpu_backend, gpu_model, gpu_count, vram_total_mb, host_thermal_note,
 			total_points, max_points, report_path, error
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		r.ID, r.StartedAt, nullInt64(r.FinishedAt), string(r.Status), jsonString(r.ScenarioIDs),
-		r.Runtime, r.RuntimeKind, nullString(r.Endpoint), r.Model, nullString(r.ModelFile),
+		r.Runtime, r.RuntimeKind, nullString(r.Endpoint), r.Model, r.Source, nullString(r.ModelFile),
 		nullString(r.Quant), nullFloat64(r.QuantTier), nullString(r.QuantSource), nullInt(r.ContextSize),
 		nullString(r.Harness), nullString(r.GPUBackend), nullString(r.GPUModel), nullInt(r.GPUCount),
 		nullInt(r.VRAMTotalMB), nullString(r.HostThermalNote), nullInt(r.TotalPoints),

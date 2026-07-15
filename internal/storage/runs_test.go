@@ -27,6 +27,7 @@ func TestRunLifecycle(t *testing.T) {
 		Runtime:     "local",
 		RuntimeKind: "llama.cpp",
 		Model:       "test-model",
+		Source:      "local",
 	}
 	if err := store.InsertRun(run); err != nil {
 		t.Fatalf("insert run: %v", err)
@@ -75,6 +76,7 @@ func TestListRuns(t *testing.T) {
 			Runtime:     "local",
 			RuntimeKind: "llama.cpp",
 			Model:       "test-model",
+			Source:      "local",
 			TotalPoints: intPtr(5),
 			MaxPoints:   intPtr(10),
 		}); err != nil {
@@ -117,6 +119,7 @@ func TestGetRunWithScenarios(t *testing.T) {
 		Runtime:     "local",
 		RuntimeKind: "llama.cpp",
 		Model:       "test-model",
+		Source:      "local",
 		TotalPoints: intPtr(5),
 		MaxPoints:   intPtr(10),
 	}); err != nil {
@@ -171,6 +174,7 @@ func TestListEvents(t *testing.T) {
 		Runtime:     "local",
 		RuntimeKind: "llama.cpp",
 		Model:       "test-model",
+		Source:      "local",
 	}
 	if err := store.InsertRun(run); err != nil {
 		t.Fatalf("insert run: %v", err)

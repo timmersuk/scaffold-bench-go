@@ -23,6 +23,7 @@ import (
 	"github.com/timmersuk/scaffold-bench-go/internal/model"
 	"github.com/timmersuk/scaffold-bench-go/internal/oneshot"
 	"github.com/timmersuk/scaffold-bench-go/internal/realtime"
+	"github.com/timmersuk/scaffold-bench-go/internal/report"
 	"github.com/timmersuk/scaffold-bench-go/internal/runner"
 	"github.com/timmersuk/scaffold-bench-go/internal/storage"
 	"github.com/timmersuk/scaffold-bench-go/internal/web"
@@ -336,6 +337,31 @@ func (s *server) handleStartRun(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "either local or remote endpoint must be configured"})
 		return
 	}
+	
+	// Determine source based on model
+	if req.Source == "" {
+		local := s.discoverLocalModels(r.Context())
+		remote := s.discoverRemoteModels(r.Context())
+		
+		for _, m := range local {
+			if m.ID == req.ModelID {
+				req.Source = "local"
+				break
+			}
+		}
+		if req.Source == "" {
+			for _, m := range remote {
+				if m.ID == req.ModelID {
+					req.Source = "remote"
+					break
+				}
+			}
+		}
+		if req.Source == "" {
+			req.Source = "local" // default fallback
+		}
+	}
+	
 	runID, err := s.runner.Start(req)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
@@ -672,11 +698,13 @@ func (s *server) handleOneshotArtifact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleReportData(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"models":     []any{},
-		"categories": []any{},
-		"difficulty": []any{},
-	})
+	builder := report.NewBuilder(s.store, s.registry)
+	data, err := builder.Build()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to build report: " + err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, data)
 }
 
 func (s *server) handleFrontend(w http.ResponseWriter, r *http.Request) {
