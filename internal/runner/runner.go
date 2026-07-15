@@ -29,13 +29,14 @@ const defaultBuildTimeout = 60 * time.Second
 
 // StartRequest is the payload for POST /api/runs.
 type StartRequest struct {
-	ScenarioIDs   []string          `json:"scenarioIds"`
-	ModelID       string            `json:"modelId,omitempty"`
-	Endpoint      string            `json:"endpoint,omitempty"`
-	APIKey        string            `json:"apiKey,omitempty"`
-	SystemPrompt  string            `json:"systemPrompt,omitempty"`
-	Harness       string            `json:"harness,omitempty"`
-	TimeoutMs     int               `json:"timeoutMs,omitempty"`
+	ScenarioIDs   []string                `json:"scenarioIds"`
+	ModelID       string                  `json:"modelId,omitempty"`
+	Source        string                  `json:"source,omitempty"`
+	Endpoint      string                  `json:"endpoint,omitempty"`
+	APIKey        string                  `json:"apiKey,omitempty"`
+	SystemPrompt  string                  `json:"systemPrompt,omitempty"`
+	Harness       string                  `json:"harness,omitempty"`
+	TimeoutMs     int                     `json:"timeoutMs,omitempty"`
 	ToolExecution agent.ToolExecutionMode `json:"toolExecution,omitempty"`
 }
 
@@ -93,10 +94,14 @@ func (e *Engine) Start(req StartRequest) (string, error) {
 		RuntimeKind: "llama.cpp",
 		Endpoint:    req.Endpoint,
 		Model:       req.ModelID,
+		Source:      req.Source,
 		Harness:     req.Harness,
 	}
 	if run.Endpoint == "" {
 		run.Endpoint = e.cfg.LocalEndpoint()
+	}
+	if run.Source == "" {
+		run.Source = "local"
 	}
 
 	if err := e.store.InsertRun(run); err != nil {

@@ -65,10 +65,112 @@ export interface ScenarioResult {
   error?: string;
 }
 
+export interface ReportCategoryScore {
+  points: number;
+  maxPoints: number;
+  pct: number | null;
+}
+
+export interface ReportDifficultyScore {
+  points: number;
+  maxPoints: number;
+  pct: number | null;
+}
+
+export interface ContextByTurn {
+  turn: number;
+  meanPromptTokens: number;
+  runs: number;
+}
+
+export interface ContextCapPoint {
+  cap: number;
+  solved: number;
+  pct: number;
+}
+
+export interface SolveRateByContextCap {
+  attempts: number;
+  points: ContextCapPoint[];
+}
+
+export interface ReportModelAggregate {
+  model: string;
+  source: "local" | "remote";
+  runs: number;
+  scorePct: number;
+  solveAttempts: number;
+  solveCount: number;
+  solveRatePct: number;
+  solveCiLowPct: number;
+  solveCiHighPct: number;
+  disciplinePct: number;
+  verifyRatePct: number | null;
+  verifyEligibleRuns: number;
+  bashCallsPerRun: number | null;
+  verifyPassesPerRun: number | null;
+  pointsAvg: number;
+  maxAvg: number;
+  totalWallSeconds: number;
+  avgScenarioSeconds: number;
+  avgFirstTokenSeconds: number | null;
+  completionTps: number | null;
+  completionTpsApprox: boolean;
+  promptTps: number | null;
+  promptTpsApprox: boolean;
+  avgTokensPerScenario: number;
+  avgTokensPerRun: number;
+  promptTokensAvg: number;
+  completionTokensAvg: number;
+  paretoFrontier: boolean;
+  toolCallsTotal: number;
+  requests: number;
+  timeouts: number;
+  exemptScenarios: number;
+  categories: Record<string, ReportCategoryScore>;
+  tiers: Record<string, ReportDifficultyScore>;
+  scenarioCount: number;
+  latestTimestamp: string;
+  avgContextPerTurn: number | null;
+  contextPerTurnByHarness?: Record<string, number>;
+  contextByTurn?: ContextByTurn[];
+  solveRateByContextCap?: SolveRateByContextCap;
+}
+
+export interface ParetoPoint {
+  model: string;
+  source: "local" | "remote";
+  scenarioId: string;
+  category: string;
+  points: number;
+  maxPoints: number;
+  scorePct: number;
+  correctness: number | null;
+  totalTokens: number;
+}
+
+export interface ReportTotals {
+  models: number;
+  runs: number;
+  local: number;
+  remote: number;
+  scenarioRuns: number;
+}
+
+export interface ReportAwards {
+  bestOverall?: ReportModelAggregate;
+  bestEfficiency?: ReportModelAggregate;
+  fastestGeneration?: ReportModelAggregate;
+  fastestPrompt?: ReportModelAggregate;
+}
+
 export interface ReportData {
-  models: unknown[];
-  categories: unknown[];
-  difficulty: unknown[];
+  models: ReportModelAggregate[];
+  categories: string[];
+  totals: ReportTotals;
+  snapshot: string;
+  awards: ReportAwards;
+  pareto: ParetoPoint[];
 }
 
 export interface RuntimeConfig {

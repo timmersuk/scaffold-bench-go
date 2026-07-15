@@ -516,6 +516,7 @@ func TestListRunsEndpointReturnsRuns(t *testing.T) {
 		Runtime:     "local",
 		RuntimeKind: "llama.cpp",
 		Model:       "test-model",
+		Source:      "local",
 		TotalPoints: intPtr(5),
 		MaxPoints:   intPtr(10),
 	}); err != nil {
@@ -571,6 +572,7 @@ func TestGetRunEndpointReturnsRunWithScenarios(t *testing.T) {
 		Runtime:     "local",
 		RuntimeKind: "llama.cpp",
 		Model:       "test-model",
+		Source:      "local",
 		TotalPoints: intPtr(5),
 		MaxPoints:   intPtr(10),
 	}); err != nil {

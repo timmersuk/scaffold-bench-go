@@ -62,6 +62,7 @@ type Run struct {
 	RuntimeKind     string    `json:"runtimeKind"`
 	Endpoint        string    `json:"endpoint,omitempty"`
 	Model           string    `json:"model"`
+	Source          string    `json:"source"`
 	ModelFile       string    `json:"modelFile,omitempty"`
 	Quant           string    `json:"quant,omitempty"`
 	QuantTier       *float64  `json:"quantTier,omitempty"`

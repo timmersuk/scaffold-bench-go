@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, History, FlaskConical, Settings as SettingsIcon } from "lucide-react";
+import { LayoutDashboard, History, FlaskConical, Settings as SettingsIcon, Trophy } from "lucide-react";
 import { Dashboard } from "./views/Dashboard";
 import { RunHistory } from "./views/RunHistory";
 import { RunDetailView } from "./views/RunDetailView";
 import { OneShotLab } from "./views/OneShotLab";
+import { Report } from "./views/Report";
 import { Settings } from "./views/Settings";
 import { StartRunModal } from "./components/StartRunModal";
 import { ToastProvider } from "./components/Toaster";
@@ -11,6 +12,7 @@ import { ToastProvider } from "./components/Toaster";
 type View =
   | { name: "dashboard" }
   | { name: "history" }
+  | { name: "report" }
   | { name: "oneshot" }
   | { name: "settings" }
   | { name: "run"; runId: string };
@@ -19,6 +21,7 @@ function parseView(): View {
   const params = new URLSearchParams(window.location.search);
   const name = params.get("view") ?? "dashboard";
   if (name === "history") return { name: "history" };
+  if (name === "report") return { name: "report" };
   if (name === "oneshot") return { name: "oneshot" };
   if (name === "settings") return { name: "settings" };
   if (name === "run") {
@@ -73,6 +76,9 @@ export default function App() {
               <NavButton {...link({ name: "history" })} icon={<History size={18} />}>
                 History
               </NavButton>
+              <NavButton {...link({ name: "report" })} icon={<Trophy size={18} />}>
+                Leaderboard
+              </NavButton>
               <NavButton {...link({ name: "oneshot" })} icon={<FlaskConical size={18} />}>
                 One-shot
               </NavButton>
@@ -97,6 +103,7 @@ export default function App() {
               onOpenRun={(runId) => navigate({ name: "run", runId })}
             />
           )}
+          {view.name === "report" && <Report onBack={() => navigate({ name: "dashboard" })} />}
           {view.name === "run" && <RunDetailView runId={view.runId} onBack={() => navigate({ name: "history" })} />}
           {view.name === "oneshot" && <OneShotLab onBack={() => navigate({ name: "dashboard" })} />}
           {view.name === "settings" && <Settings onBack={() => navigate({ name: "dashboard" })} />}
