@@ -11,12 +11,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockApi.activeRun.mockResolvedValue({ runId: null });
   mockApi.getRunEvents.mockResolvedValue([]);
-  global.fetch = vi.fn().mockResolvedValue({ ok: true });
-  global.EventSource = vi.fn().mockImplementation(() => ({
+  (globalThis as any).fetch = vi.fn().mockResolvedValue({ ok: true });
+  (globalThis as any).EventSource = vi.fn().mockImplementation(() => ({
     close: vi.fn(),
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
-  })) as any;
+  }));
 });
 
 describe("Dashboard", () => {
