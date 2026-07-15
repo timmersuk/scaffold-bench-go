@@ -18,7 +18,7 @@ A single-binary Go + Vite port of [scaffold-bench](https://github.com/1337hero/s
 | Scenarios ported | 🚧 In progress | SB-01 and SB-25 ported and validated against golden workspaces; remaining 48 scenarios not started |
 | Frontend wiring | 🚧 Partial | `/api/scenarios`, `/api/models`, and SSE run stream are wired; Dashboard view implemented in PR #29. RunHistory implemented and reuses Dashboard three-pane layout. OneShotLab fully implemented in PR #42. |
 | One-shot lab | ✅ Done | Full implementation: engine, API routes, frontend UI, 15 prompts, latest-per-prompt semantics (ADR-0007) |
-| Reports / leaderboard | ❌ Not started | `/api/report/data` returns empty skeleton |
+| Reports / leaderboard | ✅ Done | Full upstream parity: Solve %, Discipline %, Verify %, categories, tiers, context analysis, Pareto frontier, awards (PR #43) |
 | Frontend tests | ❌ Missing | No Vitest / React Testing Library setup |
 
 ## Decisions captured
@@ -57,12 +57,15 @@ All closed design issues from the wayfinder map:
 - [x] [#22 Add display names for models in /api/models response](https://github.com/timmersuk/scaffold-bench-go/issues/22)
 - [x] [#23 Reuse HTTP client for local /v1/models discovery](https://github.com/timmersuk/scaffold-bench-go/issues/23)
 - [x] [#34 Add runtime configuration persistence with REST API and frontend UI](https://github.com/timmersuk/scaffold-bench-go/issues/34) — persists endpoint/model list settings in a JSON file in the data folder, editable via the UI only when no run is active
+- [x] Implement `/api/report/data` with full upstream aggregation (Solve %, Discipline %, Verify %, context analysis, Pareto, awards) — PR #43
+- [x] Add `source` field to runs table (local/remote) with schema migration — PR #43
 
 ### Frontend & UX
 
 - [x] Wire Dashboard to `/api/scenarios`, `/api/models`, and SSE run stream — implemented in PR #29
 - [x] Wire RunHistory to stored runs and replay events into Dashboard three-pane layout
 - [x] Implement OneShotLab views and connect to `/api/oneshot/*`
+- [x] Implement Report leaderboard view with awards, totals, and model rankings (PR #43)
 - [ ] Add Vitest + React Testing Library and component tests
 
 ### Infrastructure
