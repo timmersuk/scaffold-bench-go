@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { api, ApiError } from "./api";
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+(globalThis as any).fetch = mockFetch;
 
 beforeEach(() => {
   mockFetch.mockReset();
@@ -162,7 +162,13 @@ describe("api client", () => {
   describe("PUT requests", () => {
     it("updateConfig puts to /api/config", async () => {
       mockFetch.mockReturnValue(mockResponse({ localEndpoint: "http://localhost:8080" }));
-      const body = { localEndpoint: "http://localhost:8080" };
+      const body = {
+        localEndpoint: "http://localhost:8080",
+        remoteEndpoint: "https://api.example.com",
+        remoteApiKey: "test-key",
+        remoteModels: ["gpt-4", "claude-3"],
+        remoteModelCacheTTLSeconds: 300,
+      };
       const result = await api.updateConfig(body);
       expect(mockFetch).toHaveBeenCalledWith("/api/config", {
         method: "PUT",
