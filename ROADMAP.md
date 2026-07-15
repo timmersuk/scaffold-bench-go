@@ -16,8 +16,8 @@ A single-binary Go + Vite port of [scaffold-bench](https://github.com/1337hero/s
 | Scenario manifest schema | ✅ Done | `docs/design/scenario-manifest.md`, YAML/JSON loader, Go evaluator interface |
 | Run engine & evaluator | 🚧 Partial | Core checks complete; `requires` enforcement and trace-semantic fixes landed (#24, #25). Native Go AST checks implemented for SB-25 (#14, ADR-0002). Parallel tool execution with hooks implemented (#17). Preflight warmup and metadata collection implemented (#18). Remaining gap: port remaining 48 scenarios. |
 | Scenarios ported | 🚧 In progress | SB-01 and SB-25 ported and validated against golden workspaces; remaining 48 scenarios not started |
-| Frontend wiring | 🚧 Partial | `/api/scenarios`, `/api/models`, and SSE run stream are wired; Dashboard view implemented in PR #29. RunHistory implemented and reuses Dashboard three-pane layout. OneShotLab remains placeholder. |
-| One-shot lab | ❌ Not started | API stubs only (`/api/oneshot/*` return empty) |
+| Frontend wiring | 🚧 Partial | `/api/scenarios`, `/api/models`, and SSE run stream are wired; Dashboard view implemented in PR #29. RunHistory implemented and reuses Dashboard three-pane layout. OneShotLab fully implemented in PR #42. |
+| One-shot lab | ✅ Done | Full implementation: engine, API routes, frontend UI, 15 prompts, latest-per-prompt semantics (ADR-0007) |
 | Reports / leaderboard | ❌ Not started | `/api/report/data` returns empty skeleton |
 | Frontend tests | ❌ Missing | No Vitest / React Testing Library setup |
 
@@ -62,7 +62,7 @@ All closed design issues from the wayfinder map:
 
 - [x] Wire Dashboard to `/api/scenarios`, `/api/models`, and SSE run stream — implemented in PR #29
 - [x] Wire RunHistory to stored runs and replay events into Dashboard three-pane layout
-- [ ] Implement OneShotLab views and connect to `/api/oneshot/*`
+- [x] Implement OneShotLab views and connect to `/api/oneshot/*`
 - [ ] Add Vitest + React Testing Library and component tests
 
 ### Infrastructure
