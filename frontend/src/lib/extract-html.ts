@@ -19,11 +19,11 @@ export function extractHtml(output: string): string | null {
     if (looksLikeHtml(html)) return repairHtml(html);
   }
 
-  const htmlTagMatch = output.match(/<html[\s\S]*<\/html>/i);
-  if (htmlTagMatch) return htmlTagMatch[0].trim();
-
   const doctypeMatch = output.match(/<!doctype\s+html[\s\S]*<\/html>/i);
   if (doctypeMatch) return doctypeMatch[0].trim();
+
+  const htmlTagMatch = output.match(/<html[\s\S]*<\/html>/i);
+  if (htmlTagMatch) return htmlTagMatch[0].trim();
 
   const incompleteMatch = output.match(/(<!doctype\s+html|<html\b)([\s\S]*)/i);
   if (incompleteMatch) {
