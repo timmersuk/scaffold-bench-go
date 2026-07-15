@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reducer, INITIAL_REDUCER_STATE, type ReducerState, type Action } from "./run-state-reducer";
+import { reducer, INITIAL_REDUCER_STATE, type ReducerState } from "./run-state-reducer";
 import type { PersistedEvent } from "../types";
 
 function makeState(overrides: Partial<ReducerState> = {}): ReducerState {

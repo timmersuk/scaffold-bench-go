@@ -1,3 +1,12 @@
+## Verification
+
+Code is NOT done until verification passes, don't rely on isolated partial tests.
+
+**Frontend:** `cd frontend && tsc --noEmit && bun run test:run`  
+**Backend:** `go test ./...`
+
+---
+
 ## Agent skills
 
 ### Issue tracker

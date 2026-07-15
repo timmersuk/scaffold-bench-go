@@ -73,7 +73,7 @@ describe("getCategoryRollups", () => {
   it("aggregates points by category for completed scenarios", () => {
     const state = makeState({
       scenarios: [
-        makeScenario({ category: "surgical-edit", status: "done", points: 10, maxPoints: 10 }),
+        makeScenario({ category: "surgical-edit", status: "pass", points: 10, maxPoints: 10 }),
         makeScenario({ category: "surgical-edit", status: "pass", points: 8, maxPoints: 10 }),
         makeScenario({ category: "implementation", status: "fail", points: 0, maxPoints: 10 }),
       ],
@@ -97,7 +97,7 @@ describe("getCategoryRollups", () => {
       scenarios: [
         makeScenario({ category: "surgical-edit", status: "pending", points: 5, maxPoints: 10 }),
         makeScenario({ category: "surgical-edit", status: "running", points: 5, maxPoints: 10 }),
-        makeScenario({ category: "surgical-edit", status: "done", points: 10, maxPoints: 10 }),
+        makeScenario({ category: "surgical-edit", status: "pass", points: 10, maxPoints: 10 }),
       ],
     });
     const result = getCategoryRollups(state);
@@ -174,13 +174,32 @@ describe("getModel", () => {
 
   it("falls back to focused scenario metrics", () => {
     const state = makeState({ model: null });
-    const focused = makeScenario({ liveMetrics: { model: "claude-3" } });
+    const focused = makeScenario({
+      liveMetrics: {
+        model: "claude-3",
+        requestCount: 1,
+        promptTokens: 100,
+        completionTokens: 50,
+        totalTokens: 150,
+        totalRequestTimeMs: 1000,
+      },
+    });
     const result = getModel(state, focused);
     expect(result).toBe("claude-3");
   });
 
   it("falls back to global metrics", () => {
-    const state = makeState({ model: null, globalMetrics: { model: "gpt-3.5" } });
+    const state = makeState({
+      model: null,
+      globalMetrics: {
+        model: "gpt-3.5",
+        requestCount: 1,
+        promptTokens: 100,
+        completionTokens: 50,
+        totalTokens: 150,
+        totalRequestTimeMs: 1000,
+      },
+    });
     const result = getModel(state, undefined);
     expect(result).toBe("gpt-3.5");
   });

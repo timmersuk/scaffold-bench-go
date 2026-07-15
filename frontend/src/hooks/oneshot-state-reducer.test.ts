@@ -4,7 +4,6 @@ import {
   initialState,
   hydrateFromLatestRun,
   type OneshotState,
-  type OneshotAction,
 } from "./oneshot-state-reducer";
 import type { BackendEvent, OneshotResult } from "../types";
 
@@ -265,6 +264,7 @@ describe("hydrateFromLatestRun", () => {
     const results: OneshotResult[] = [
       {
         promptId: "p1",
+        runId: "run-1",
         status: "done",
         output: "<html>test</html>",
         model: "gpt-4",
@@ -277,6 +277,7 @@ describe("hydrateFromLatestRun", () => {
       },
       {
         promptId: "p2",
+        runId: "run-1",
         status: "failed",
         output: "",
         error: "Timeout",
