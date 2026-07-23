@@ -64,7 +64,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, in Input) model.Evaluation {
 		Status:    "fail",
 		Points:    0,
 		MaxPoints: in.Manifest.maxPoints(),
-		Checks:    nil,
+		Checks:    []model.CheckResult{},
 		Breakdown: model.Breakdown{},
 	}
 

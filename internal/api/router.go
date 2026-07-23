@@ -506,6 +506,23 @@ func (s *server) handleGetRun(w http.ResponseWriter, r *http.Request, runID stri
 
 	scenarioInfos := make([]scenarioResult, 0, len(scenarios))
 	for _, sr := range scenarios {
+		modelMetrics, metricsErr := jsonRaw(sr.ModelMetricsJSON)
+		evaluation, evalErr := jsonRaw(sr.EvaluationJSON)
+		
+		errMsg := sr.Error
+		if metricsErr != "" {
+			if errMsg != "" {
+				errMsg += "; "
+			}
+			errMsg += "model metrics: " + metricsErr
+		}
+		if evalErr != "" {
+			if errMsg != "" {
+				errMsg += "; "
+			}
+			errMsg += "evaluation: " + evalErr
+		}
+		
 		scenarioInfos = append(scenarioInfos, scenarioResult{
 			ScenarioID:    sr.ScenarioID,
 			Category:      sr.Category,
@@ -516,11 +533,11 @@ func (s *server) handleGetRun(w http.ResponseWriter, r *http.Request, runID stri
 			WallTimeMs:    sr.WallTimeMs,
 			FirstTokenMs:  sr.FirstTokenMs,
 			ToolCallCount: zeroIfNil(sr.ToolCallCount),
-			ModelMetrics:  jsonRaw(sr.ModelMetricsJSON),
-			Evaluation:    jsonRaw(sr.EvaluationJSON),
+			ModelMetrics:  modelMetrics,
+			Evaluation:    evaluation,
 			RubricKind:    sr.RubricKind,
 			Breakdown:     breakdown(&sr),
-			Error:         sr.Error,
+			Error:         errMsg,
 		})
 	}
 
@@ -1096,15 +1113,16 @@ func zeroIfNil(v *int) int {
 	return *v
 }
 
-func jsonRaw(s string) any {
+func jsonRaw(s string) (any, string) {
 	if s == "" {
-		return nil
+		return nil, ""
 	}
 	var v any
 	if err := json.Unmarshal([]byte(s), &v); err != nil {
-		return nil
+		slog.Error("jsonRaw unmarshal", "err", err, "data", s)
+		return nil, fmt.Sprintf("corrupted data: %s", err)
 	}
-	return v
+	return v, ""
 }
 
 func breakdown(sr *model.ScenarioRun) any {

@@ -121,7 +121,7 @@ export function VerificationPanel({
               <>
                 <div className="border-t border-gray-200 my-1 pt-2">
                   <div className="text-[11px] text-gray-500 uppercase tracking-widest mb-2">Evaluation</div>
-                  {scenario.evaluation.checks.map((check) => (
+                  {scenario.evaluation.checks?.map((check) => (
                     <EvalCheck key={check.name} check={check} />
                   ))}
                   {scenario.evaluation.summary && (

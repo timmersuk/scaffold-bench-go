@@ -505,6 +505,10 @@ export function normalizeBackendEvent(ev: BackendEvent): PersistedEvent | null {
     }
     case "scenario_finished": {
       const p = (ev.payload ?? {}) as Record<string, unknown>;
+      const evaluation = (p.evaluation as ScenarioEvaluation) ?? { status: "fail", points: 0, maxPoints: 0, checks: [], summary: "" };
+      if (!evaluation.checks) {
+        evaluation.checks = [];
+      }
       return {
         ...base,
         type: "scenario_finished",
@@ -516,7 +520,7 @@ export function normalizeBackendEvent(ev: BackendEvent): PersistedEvent | null {
         firstTokenMs: typeof p.firstTokenMs === "number" ? p.firstTokenMs : undefined,
         turnWallTimes: Array.isArray(p.turnWallTimes) ? p.turnWallTimes : undefined,
         turnFirstTokenMs: Array.isArray(p.turnFirstTokenMs) ? p.turnFirstTokenMs : undefined,
-        evaluation: (p.evaluation as ScenarioEvaluation) ?? { status: "fail", points: 0, maxPoints: 0, checks: [], summary: "" },
+        evaluation,
         modelMetrics: (p.modelMetrics as ModelMetrics) ?? undefined,
         family: (p.family as string) ?? undefined,
         rubricKind: (p.rubricKind as string) ?? undefined,
