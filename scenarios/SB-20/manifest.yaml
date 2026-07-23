@@ -1,0 +1,51 @@
+meta:
+  id: "SB-20"
+  name: "long-context-retrieval"
+  category: "long-context"
+  family: "regex-style"
+  difficulty: "high"
+  rubricKind: "custom-3pt"
+  signalType: "latency"
+  track: "execution"
+  prompt: |
+    Long inline codebase retrieval: identify `throttleWithJitter`, report its name, line range, and get the first meaningful token out inside 30 seconds.
+
+    The complete codebase is inlined in the prompt. Answer purely from the text in this prompt — do not use tools, do not read or grep any file.
+
+    Find the function that implements throttling with jitter. Return exactly two lines in this format:
+    name: <function name>
+    line_range: <start>-<end>
+
+requires: []
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-20"
+  allowedPaths: []
+
+longContext:
+  inlineFile: "playground/sb23-longcontext.js"
+  removeBeforeRun: true
+  targetFunction: "throttleWithJitter"
+
+rubric:
+  correctness:
+    - name: "reported function name"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/sb23-longcontext.js"
+        pattern: "\\bthrottleWithJitter\\b"
+
+  scope: []
+
+  pattern: []
+
+  verification: []
+
+  cleanup: []
+
+labels:
+  pass: "Retrieved the target function correctly and started responding quickly."
+  partial: "Found some of the answer, but missed either speed or exact range."
+  fail: "Missed the retrieval target and did not respond quickly enough."

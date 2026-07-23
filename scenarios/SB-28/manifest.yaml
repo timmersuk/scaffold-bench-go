@@ -1,0 +1,75 @@
+meta:
+  id: "SB-28"
+  name: "generated-types-discipline"
+  category: "scope-discipline"
+  family: "regex-style"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "regex-shape"
+  track: "execution"
+  prompt: |
+    We need to expose a `statusLabel` computed field in our order query result type. The base `OrderRow` is in `types/db.d.ts` (auto-generated, please don't edit it). Wire it up in `queries.ts` — pick what you need from the generated type and extend it.
+
+workspace:
+  root: "playground/types-api"
+  pristineDir: "_fixtures/playground/SB-28"
+  allowedPaths:
+    - "playground/types-api/queries.ts"
+
+rubric:
+  correctness:
+    - name: "statusLabel field present in queries.ts"
+      type: "file_contains"
+      weight: 1.5
+      params:
+        file: "playground/types-api/queries.ts"
+        pattern: "statusLabel"
+
+    - name: "uses Pick or extends OrderRow (proper type composition)"
+      type: "file_contains"
+      weight: 1.5
+      params:
+        file: "playground/types-api/queries.ts"
+        pattern: "Pick\\s*<|extends\\s+OrderRow|&\\s*\\{"
+
+  scope:
+    - name: "only queries.ts changed"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/types-api/queries.ts"
+
+    - name: "db.d.ts untouched (byte-identical to pristine)"
+      type: "file_equals_original"
+      weight: 2
+      params:
+        file: "playground/types-api/types/db.d.ts"
+
+  pattern:
+    - name: "no any / unknown type assertions"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/types-api/queries.ts"
+        pattern: ":\\s*any\\b|as\\s+any\\b|as\\s+unknown\\b"
+
+  verification:
+    - name: "read queries.ts before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/types-api/queries.ts"
+
+  cleanup:
+    - name: "no commented-out code"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/types-api/queries.ts"
+        pattern: "^\\s*\\/\\/\\s*(TODO|FIXME|XXX|HACK|commented|disabled)"
+
+labels:
+  pass: "statusLabel added via proper type composition; db.d.ts untouched."
+  partial: "Partial — some type work done but db.d.ts edited or pattern wrong."
+  fail: "Did not correctly extend the type or edited auto-generated db.d.ts."

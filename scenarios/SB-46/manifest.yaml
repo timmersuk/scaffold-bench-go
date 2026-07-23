@@ -1,0 +1,97 @@
+meta:
+  id: "SB-46"
+  name: "responsive-grid"
+  category: "implementation"
+  family: "feature-add"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Add a `.card-grid` layout to `playground/css-ui/styles/main.css` using CSS Grid. Specs: 1 column below 640px, 2 columns below 1024px, 3 columns at 1024px and above. Use `var(--grid-gap, 1.5rem)` for the grid gap. No flexbox, no floats, no frameworks.
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-46"
+  allowedPaths:
+    - "playground/css-ui/styles/main.css"
+
+rubric:
+  correctness:
+    - name: ".card-grid has display: grid"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "\\.card-grid\\s*\\{[^}]*display\\s*:\\s*grid"
+
+    - name: "media query at 640px with 2 columns"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "@media[^{]*640px[^{]*\\{[^}]*\\.card-grid[^}]*(repeat\\s*\\(\\s*2|1fr\\s+1fr)"
+
+    - name: "media query at 1024px with 3 columns"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "@media[^{]*1024px[^{]*\\{[^}]*\\.card-grid[^}]*(repeat\\s*\\(\\s*3|1fr\\s+1fr\\s+1fr)"
+
+    - name: "uses var(--grid-gap, 1.5rem) for gap"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "\\.card-grid[^}]*gap\\s*:\\s*var\\(--grid-gap"
+
+  scope:
+    - name: "only main.css changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/css-ui/styles/main.css"
+
+  pattern:
+    - name: "breakpoints exactly 640px and 1024px"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "640px"
+
+    - name: "no flexbox on .card-grid"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "\\.card-grid[^}]*display\\s*:\\s*flex"
+
+  verification:
+    - name: "read main.css before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/css-ui/styles/main.css"
+
+  cleanup:
+    - name: "no commented-out grid experiments"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "/\\*[\\s\\S]*?grid[\\s\\S]*?\\*/"
+
+    - name: "no spurious file changes"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/css-ui/styles/main.css"
+
+labels:
+  pass: "CSS Grid with correct breakpoints and var(--grid-gap); no flexbox."
+  partial: "Grid implemented but wrong breakpoints or missing gap variable."
+  fail: "Flexbox used or breakpoints wrong or display:grid missing."

@@ -1,0 +1,86 @@
+meta:
+  id: "SB-41"
+  name: "liquid-soldout"
+  category: "surgical-edit"
+  family: "regex-style"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    The featured product grid at `playground/liquid-shop/sections/featured-grid.liquid` is showing sold-out products even when the 'Show sold-out products' toggle is off in section settings. Fix the template to respect `section.settings.show_soldout`.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-41"
+  allowedPaths:
+    - "playground/liquid-shop/sections/featured-grid.liquid"
+
+rubric:
+  correctness:
+    - name: "hides sold-out when show_soldout=false"
+      type: "command"
+      weight: 2
+      params:
+        command: "cd playground/liquid-shop && bun install --silent 2>/dev/null && bun test-soldout-hide.ts"
+        timeout_ms: 30000
+
+    - name: "shows all when show_soldout=true"
+      type: "command"
+      weight: 1
+      params:
+        command: "cd playground/liquid-shop && bun install --silent 2>/dev/null && bun test-soldout-show.ts"
+        timeout_ms: 30000
+
+  scope:
+    - name: "only featured-grid.liquid changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/liquid-shop/sections/featured-grid.liquid"
+
+  pattern:
+    - name: "uses available guard (if/unless product.available)"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/liquid-shop/sections/featured-grid.liquid"
+        pattern: "\\{%[-\\s]*(?:if|unless)\\s+product\\.available"
+
+    - name: "no data mutation via assign products"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/liquid-shop/sections/featured-grid.liquid"
+        pattern: "\\{%[-\\s]*assign\\s+products"
+
+  verification:
+    - name: "read featured-grid.liquid before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/liquid-shop/sections/featured-grid.liquid"
+
+  cleanup:
+    - name: "no leftover comment blocks"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/liquid-shop/sections/featured-grid.liquid"
+        pattern: "\\{%[-\\s]*comment[\\s\\S]*?endcomment"
+
+    - name: "no spurious file changes"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/liquid-shop/sections/featured-grid.liquid"
+
+labels:
+  pass: "Sold-out guard works; only featured-grid.liquid changed."
+  partial: "Partial filtering or scope drift."
+  fail: "Sold-out products not filtered by section setting."

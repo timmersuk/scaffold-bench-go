@@ -1,0 +1,78 @@
+meta:
+  id: "SB-18"
+  name: "hono-fix-n-plus-1"
+  category: "implementation"
+  family: "spec-impl"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Read the spec at playground/hono-api/specs/fix-n-plus-1.md and implement the fix described there. Follow the patterns already established in playground/hono-api/.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground/hono-api"
+  pristineDir: "_fixtures/playground/SB-18"
+  allowedPaths:
+    - "playground/hono-api/src/routes/items.ts"
+
+rubric:
+  correctness:
+    - name: "bun tests pass"
+      type: "command"
+      weight: 3
+      params:
+        command: "cd playground/hono-api && bun install --frozen-lockfile 2>/dev/null || bun install && bun test tests/sb-18-fix-n-plus-1.test.ts"
+        timeout_ms: 60000
+
+  scope:
+    - name: "only expected files changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/hono-api/src/routes/items.ts"
+
+  pattern:
+    - name: "uses JOIN on users table"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/routes/items.ts"
+        pattern: "JOIN\\s+users"
+
+    - name: "removed per-row owner query"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/routes/items.ts"
+        pattern: "SELECT\\s+email\\s+FROM\\s+users\\s+WHERE\\s+id\\s*=\\s*\\?"
+
+  verification:
+    - name: "read the spec file"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/hono-api/specs/fix-n-plus-1.md"
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/routes/items.ts"
+
+    - name: "no console.log"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/routes/items.ts"
+        pattern: "console\\.log"
+
+labels:
+  pass: "All tests pass, N+1 replaced with JOIN, and other handlers preserved."
+  partial: "Some tests fail or still has per-row query."
+  fail: "Did not fix the N+1 or broke the route."

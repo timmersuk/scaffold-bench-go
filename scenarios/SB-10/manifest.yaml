@@ -1,0 +1,87 @@
+meta:
+  id: "SB-10"
+  name: "verify-and-repair"
+  category: "verify-and-repair"
+  family: "regression"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Fix calculateSubtotal in playground/cart.mjs and verify the fix.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-10"
+  allowedPaths:
+    - "playground/cart.mjs"
+
+hiddenFixtures:
+  - src: "_fixtures/behaviors/SB-10/cart.behavior.test.mjs"
+    dest: "playground/cart.behavior.test.mjs"
+
+rubric:
+  correctness:
+    - name: "calculateSubtotal multiplies price by quantity (behavioral)"
+      type: "behavioral_test"
+      weight: 3
+      params:
+        runner: "bun-test"
+        testFile: "playground/cart.behavior.test.mjs"
+        files:
+          - "playground/cart.mjs"
+
+  scope:
+    - name: "edited only cart.mjs"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/cart.mjs"
+
+    - name: "cart test file left untouched"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/cart.test.mjs"
+
+  pattern:
+    - name: "no extra functions introduced"
+      type: "no_extra_functions"
+      weight: 1
+      params:
+        file: "playground/cart.mjs"
+
+    - name: "kept existing export shape"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/cart.mjs"
+        pattern: "export\\s+function\\s+calculateSubtotal"
+
+  verification:
+    - name: "ran a passing verification command after editing"
+      type: "trace_verification_after_change"
+      weight: 1
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 1
+      params:
+        file: "playground/cart.mjs"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/cart.mjs"
+        pattern: "console\\.log\\s*\\("
+
+labels:
+  pass: "Fixed the bug and ran a verification command afterward."
+  partial: "Fixed the bug, but skipped verification or changed more than needed."
+  fail: "Did not repair the subtotal logic correctly."

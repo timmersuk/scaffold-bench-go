@@ -1,0 +1,75 @@
+meta:
+  id: "SB-33"
+  name: "plugin-conflict-red-herring"
+  category: "read-only-analysis"
+  family: "red-herring"
+  difficulty: "high"
+  rubricKind: "10pt"
+  signalType: "stdout"
+  track: "execution"
+  prompt: |
+    Users are reporting that the site navigation menu is broken — some menu items disappear after clicking. We suspect it's the Plugin Boilerplate plugin we installed last week. Can you investigate the codebase in `playground/php-wp/` and tell us what's causing the issue?
+
+requires:
+  - "php"
+
+workspace:
+  root: "playground/php-wp"
+  pristineDir: "_fixtures/playground/SB-33"
+  allowedPaths: []
+
+rubric:
+  correctness:
+    - name: "mentions wp_nav_menu_args filter"
+      type: "stdout_regex"
+      weight: 1
+      params:
+        pattern: "wp_nav_menu_args|nav.*menu.*args"
+
+    - name: "identifies theme / priority 5 as source"
+      type: "stdout_regex"
+      weight: 1
+      params:
+        pattern: "priority\\s*[=:]\\s*5|at priority 5|priority 5|theme.*(filter|hook|register|nav)"
+
+    - name: "does NOT recommend deactivating any plugin"
+      type: "stdout_regex"
+      weight: 1
+      params:
+        pattern: "deactivat(e|ing|ion)|disabl(e|ing|ed)\\s*(the\\s+)?plugin|uninstall\\s*(the\\s+)?plugin|remove\\s+plugin\\s+boilerplate"
+        invert: true
+
+  scope:
+    - name: "no files changed"
+      type: "no_files_changed"
+      weight: 1
+
+    - name: "did NOT use edit or write tool"
+      type: "no_edit_write_tools"
+      weight: 1
+
+  pattern:
+    - name: "identifies root cause precisely (filter name + cause)"
+      type: "stdout_regex"
+      weight: 2
+      params:
+        pattern: "wp_nav_menu_args.*(priority\\s*5|at priority 5|theme)|theme.*(wp_nav_menu_args|priority\\s*5)"
+
+  verification:
+    - name: "evidence of reading nav-config or php-wp files"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/php-wp/inc/nav-config.php"
+
+  cleanup:
+    - name: "output is concise (under 3000 chars)"
+      type: "stdout_regex"
+      weight: 2
+      params:
+        pattern: "^.{0,3000}$"
+
+labels:
+  pass: "Correctly identified theme nav filter at priority 5 as the root cause; no plugin deactivation recommended."
+  partial: "Partially identified the issue but missed filter name or priority."
+  fail: "Blamed the plugin or failed to identify the real root cause."

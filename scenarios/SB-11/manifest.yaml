@@ -1,0 +1,91 @@
+meta:
+  id: "SB-11"
+  name: "verify-fail-recover-pass"
+  category: "verify-and-repair"
+  family: "regression"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Use the provided test to diagnose and fix playground/slugify.mjs. Verify the failure first, then verify the fix passes. Change only what is necessary.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-11"
+  allowedPaths:
+    - "playground/slugify.mjs"
+
+hiddenFixtures:
+  - src: "_fixtures/behaviors/SB-11/slugify.behavior.test.mjs"
+    dest: "playground/slugify.behavior.test.mjs"
+
+rubric:
+  correctness:
+    - name: "slugify collapses every whitespace group to a single dash (behavioral)"
+      type: "behavioral_test"
+      weight: 6
+      params:
+        runner: "bun-test"
+        testFile: "playground/slugify.behavior.test.mjs"
+        files:
+          - "playground/slugify.mjs"
+
+  scope:
+    - name: "edited only slugify.mjs"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/slugify.mjs"
+
+    - name: "slugify test file left untouched"
+      type: "file_equals_original"
+      weight: 2
+      params:
+        file: "playground/slugify.test.mjs"
+
+  pattern:
+    - name: "no extra functions introduced"
+      type: "no_extra_functions"
+      weight: 2
+      params:
+        file: "playground/slugify.mjs"
+
+    - name: "kept existing export shape"
+      type: "file_contains"
+      weight: 2
+      params:
+        file: "playground/slugify.mjs"
+        pattern: "export\\s+function"
+
+  verification:
+    - name: "verified the failure before changing code"
+      type: "trace_verification_before_change"
+      weight: 1
+
+    - name: "reran verification and got a passing result"
+      type: "trace_verification_after_change"
+      weight: 1
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 2
+      params:
+        file: "playground/slugify.mjs"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/slugify.mjs"
+        pattern: "console\\.log\\s*\\("
+
+labels:
+  pass: "Observed the failing test, fixed the implementation, and verified the recovery."
+  partial: "Fixed the bug, but skipped either the initial failure check or the final passing verification."
+  fail: "Did not complete the verify-fail-recover-pass loop correctly."

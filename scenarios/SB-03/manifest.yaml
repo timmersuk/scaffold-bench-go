@@ -1,0 +1,95 @@
+meta:
+  id: "SB-03"
+  name: "frontend-query-owner"
+  category: "scope-discipline"
+  family: "regex-style"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    The page and child both fetch the same users data. Make playground/frontend/UsersPage.tsx own the query and pass the data into playground/frontend/UserTable.tsx. Keep the existing stack and do not refactor unrelated code.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-03"
+  allowedPaths:
+    - "playground/frontend/UsersPage.tsx"
+    - "playground/frontend/UserTable.tsx"
+
+rubric:
+  correctness:
+    - name: "page component uses useQuery"
+      type: "ast_component_uses_hook"
+      weight: 1
+      params:
+        file: "playground/frontend/UsersPage.tsx"
+        component: "UsersPage"
+        hook: "useQuery"
+
+    - name: "page passes users data to UserTable"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/UsersPage.tsx"
+        pattern: "<UserTable[\\s\\S]*?=\\{users\\}"
+
+    - name: "child has no react-query import"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/UserTable.tsx"
+        pattern: "from\\s+[\"']@tanstack/react-query[\"']"
+
+  scope:
+    - name: "edited only UsersPage.tsx and UserTable.tsx"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/frontend/UsersPage.tsx"
+          - "playground/frontend/UserTable.tsx"
+
+  pattern:
+    - name: "page handles loading state"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/UsersPage.tsx"
+        pattern: "if\\s*\\(\\s*isLoading\\s*\\)"
+
+    - name: "existing api client left untouched"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/frontend/apiClient.ts"
+
+  verification:
+    - name: "read files before changing them (turn-ordered)"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/frontend/UsersPage.tsx"
+
+  cleanup:
+    - name: "did not swap in a different request client"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/UsersPage.tsx"
+        pattern: "fetch\\s*\\(|\\baxios\\b"
+
+    - name: "table has no apiClient import"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/UserTable.tsx"
+        pattern: "from\\s+[\"']\\./apiClient[\"']"
+
+labels:
+  pass: "Moved query ownership to the page and kept the existing stack intact."
+  partial: "Consolidated the query, but introduced some unnecessary drift."
+  fail: "Did not establish a single query owner or changed the stack."

@@ -1,0 +1,90 @@
+meta:
+  id: "SB-45"
+  name: "theme-variable-scope"
+  category: "scope-discipline"
+  family: "bug-fix"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Dark mode isn't working for our card components — they stay white even when the `.dark` class is applied to the body. The issue is in how `--card-bg` is defined in `playground/css-ui/styles/theme.css`. Fix the variable scope so both themes work correctly without touching the component styles in main.css.
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-45"
+  allowedPaths:
+    - "playground/css-ui/styles/theme.css"
+
+rubric:
+  correctness:
+    - name: "--card-bg defined on :root or html"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/theme.css"
+        pattern: "(:root|html)\\s*\\{[^}]*--card-bg"
+
+    - name: "--card-bg overridden in .dark"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/theme.css"
+        pattern: "\\.dark\\s*\\{[^}]*--card-bg"
+
+    - name: ".card still uses var(--card-bg) in main.css"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "\\.card\\s*\\{[^}]*var\\(--card-bg"
+
+  scope:
+    - name: "only theme.css changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/css-ui/styles/theme.css"
+
+  pattern:
+    - name: "fix in theme.css scope, variable approach preserved"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/theme.css"
+        pattern: "--card-bg"
+
+    - name: ".card component uses var(--card-bg), not hardcoded"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "\\.card\\s*\\{[^}]*background\\s*:\\s*var\\(--card-bg"
+
+  verification:
+    - name: "read theme.css or main.css before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/css-ui/styles/theme.css"
+
+  cleanup:
+    - name: "no commented-out fallback hardcodes"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/theme.css"
+        pattern: "/\\*[\\s\\S]*?card-bg[\\s\\S]*?\\*/"
+
+    - name: "no spurious file changes"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/css-ui/styles/theme.css"
+
+labels:
+  pass: "--card-bg scoped to :root and .dark; .card component unchanged."
+  partial: "Variable scope partially fixed but main.css modified or scope incomplete."
+  fail: ".card hardcoded or --card-bg still missing from .dark."

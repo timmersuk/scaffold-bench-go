@@ -1,0 +1,99 @@
+meta:
+  id: "SB-12"
+  name: "typescript-compile-loop"
+  category: "verify-and-repair"
+  family: "regression"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Use TypeScript compile feedback to fix playground/ts-compile/user-summary.ts. Verify the compile failure first, then verify the fix passes with this exact command: bunx tsc --noEmit -p playground/ts-compile/tsconfig.json. Change only what is necessary.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-12"
+  allowedPaths:
+    - "playground/ts-compile/user-summary.ts"
+
+rubric:
+  correctness:
+    - name: "compiles cleanly with tsc --noEmit"
+      type: "command"
+      weight: 4
+      params:
+        command: "bunx tsc --noEmit -p playground/ts-compile/tsconfig.json"
+
+    - name: "no non-null assertion on lastSeenAt"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/ts-compile/user-summary.ts"
+        pattern: "lastSeenAt!\\.toISOString"
+
+    - name: "no as any type escape"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/ts-compile/user-summary.ts"
+        pattern: "as\\s+any"
+
+  scope:
+    - name: "edited only user-summary.ts"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/ts-compile/user-summary.ts"
+
+    - name: "compile config left untouched"
+      type: "file_equals_original"
+      weight: 2
+      params:
+        file: "playground/ts-compile/tsconfig.json"
+
+  pattern:
+    - name: "no @ts-ignore directives"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/ts-compile/user-summary.ts"
+        pattern: "@ts-ignore"
+
+    - name: "kept existing export shape"
+      type: "file_contains"
+      weight: 2
+      params:
+        file: "playground/ts-compile/user-summary.ts"
+        pattern: "export\\s+"
+
+  verification:
+    - name: "verified the compile failure before changing code"
+      type: "trace_verification_before_change"
+      weight: 1
+
+    - name: "reran compile verification and got a passing result"
+      type: "trace_verification_after_change"
+      weight: 1
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 2
+      params:
+        file: "playground/ts-compile/user-summary.ts"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/ts-compile/user-summary.ts"
+        pattern: "console\\.log\\s*\\("
+
+labels:
+  pass: "Observed the TypeScript compile error, fixed it surgically, and verified the compile passed."
+  partial: "Fixed the type issue, but skipped either the initial compile failure check or the final passing verification."
+  fail: "Did not complete the TypeScript compile loop correctly."

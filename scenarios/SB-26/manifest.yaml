@@ -1,0 +1,81 @@
+meta:
+  id: "SB-26"
+  name: "zustand-store-mutation"
+  category: "surgical-edit"
+  family: "regex-style"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Our store's addItem action isn't notifying subscribers. The cart component never re-renders when items are added. The store is in `playground/frontend/store.js` — addItem needs to trigger updates.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground/frontend"
+  pristineDir: "_fixtures/playground/SB-26"
+  allowedPaths:
+    - "playground/frontend/store.js"
+
+rubric:
+  correctness:
+    - name: "store tests pass (subscriber notified, new reference)"
+      type: "behavioral_test"
+      weight: 3
+      params:
+        runner: "bun-test"
+        testFile: "playground/frontend/store.test.js"
+        files:
+          - "playground/frontend/store.js"
+
+  scope:
+    - name: "only store.js changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/frontend/store.js"
+
+  pattern:
+    - name: "uses store.setState()"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/store.js"
+        pattern: "store\\.setState\\s*\\("
+
+    - name: "no direct array mutation (.push)"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/store.js"
+        pattern: "\\.items\\.push\\s*\\("
+
+  verification:
+    - name: "read store.js before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/frontend/store.js"
+
+  cleanup:
+    - name: "no console.log"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/store.js"
+        pattern: "console\\.log\\s*\\("
+
+    - name: "no commented-out code added"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/store.js"
+        pattern: "^\\s*\\/\\/.*push"
+
+labels:
+  pass: "addItem correctly uses setState to trigger subscriber notifications."
+  partial: "Some fixes applied but issues remain."
+  fail: "addItem still mutates state directly; subscribers not notified."

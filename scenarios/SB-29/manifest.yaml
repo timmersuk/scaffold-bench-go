@@ -1,0 +1,75 @@
+meta:
+  id: "SB-29"
+  name: "test-isolation"
+  category: "verify-and-repair"
+  family: "regex-style"
+  difficulty: "high"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Our test suite passes when run alone but fails when run together. Test B fails because Test A left state in a shared cache. Both tests are in `playground/frontend/`. Please fix the isolation issue — don't skip or delete any tests.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground/frontend"
+  pristineDir: "_fixtures/playground/SB-29"
+  allowedPaths:
+    - "playground/frontend/cache.test.js"
+    - "playground/frontend/cache.js"
+
+rubric:
+  correctness:
+    - name: "tests pass without .skip (real fix, not suppressed)"
+      type: "behavioral_test"
+      weight: 3
+      params:
+        runner: "bun-test"
+        testFile: "playground/frontend/cache.test.js"
+        files:
+          - "playground/frontend/cache.test.js"
+          - "playground/frontend/cache.js"
+
+  scope:
+    - name: "only test files and cache module changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/frontend/cache.test.js"
+          - "playground/frontend/cache.js"
+
+  pattern:
+    - name: "uses beforeEach to reset cache"
+      type: "file_contains"
+      weight: 2
+      params:
+        file: "playground/frontend/cache.test.js"
+        pattern: "beforeEach\\s*\\("
+
+  verification:
+    - name: "ran a passing verification command after editing"
+      type: "trace_verification_after_change"
+      weight: 1
+
+  cleanup:
+    - name: "no console.log in test or cache files"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/cache.test.js"
+        pattern: "console\\.log\\s*\\("
+
+    - name: "no debug artifacts"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/cache.test.js"
+        pattern: "console\\.(warn|error|debug)\\s*\\("
+
+labels:
+  pass: "Both tests pass; isolation fixed via beforeEach; no tests skipped."
+  partial: "Tests pass but used .skip or wrong pattern."
+  fail: "Tests still fail or were skipped/removed instead of fixed."

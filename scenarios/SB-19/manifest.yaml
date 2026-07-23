@@ -1,0 +1,86 @@
+meta:
+  id: "SB-19"
+  name: "high-frequency-loop"
+  category: "responsiveness"
+  family: "regex-style"
+  difficulty: "medium"
+  rubricKind: "custom-5pt"
+  signalType: "latency"
+  track: "execution"
+  prompt: |
+    Five sequential micro-fixes in one conversation against playground/sb22-loop.js, scored one point per correct edit completed within 10 seconds.
+
+    Turn 1: Fix the typo in playground/sb22-loop.js where the local variable is named `usre` instead of `user`. Only make that one edit.
+    Turn 2: In playground/sb22-loop.js, change the `ENABLED` default from `false` to `true`. Only make that one edit.
+    Turn 3: In playground/sb22-loop.js, add the missing `crypto` import so the existing hash call works. Only make that one edit.
+    Turn 4: In playground/sb22-loop.js, remove the stray `console.log`. Only make that one edit.
+    Turn 5: In playground/sb22-loop.js, fix the off-by-one loop bound so the loop includes the last item. Only make that one edit.
+
+requires:
+  - "node"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-19"
+  allowedPaths:
+    - "playground/sb22-loop.js"
+
+multiTurn:
+  turns:
+    - label: "fixed typo"
+      check:
+        - name: "typo fixed: const user ="
+          type: "file_contains"
+          weight: 1
+          params:
+            file: "playground/sb22-loop.js"
+            pattern: "\\bconst\\s+user\\s*="
+        - name: "typo usre removed"
+          type: "file_not_contains"
+          weight: 0
+          params:
+            file: "playground/sb22-loop.js"
+            pattern: "\\bconst\\s+usre\\s*="
+
+    - label: "set ENABLED=true"
+      check:
+        - name: "ENABLED is true"
+          type: "file_contains"
+          weight: 1
+          params:
+            file: "playground/sb22-loop.js"
+            pattern: "const\\s+ENABLED\\s*=\\s*true\\b"
+
+    - label: "added crypto import"
+      check:
+        - name: "crypto import present"
+          type: "file_contains"
+          weight: 1
+          params:
+            file: "playground/sb22-loop.js"
+            pattern: "import\\s+(?:\\*\\s+as\\s+)?crypto\\s+from\\s+[\"'](?:node:)?crypto[\"']"
+
+    - label: "removed console.log"
+      check:
+        - name: "no console.log"
+          type: "file_not_contains"
+          weight: 1
+          params:
+            file: "playground/sb22-loop.js"
+            pattern: "console\\.log\\s*\\("
+
+    - label: "fixed loop bound"
+      check:
+        - name: "loop bound includes last item"
+          type: "file_contains"
+          weight: 1
+          params:
+            file: "playground/sb22-loop.js"
+            pattern: "for\\s*\\(\\s*let\\s+i\\s*=\\s*0\\s*;\\s*i\\s*(?:<\\s*users\\.length|<=\\s*users\\.length\\s*-\\s*1)\\s*;\\s*i\\+\\+\\s*\\)"
+
+  timeoutPerTurnMs: 10000
+
+labels:
+  pass: "Completed all five rapid-fire edits under budget."
+  partial: "Completed some of the rapid-fire edits, but missed correctness or timing on others."
+  fail: "Did not complete any of the rapid-fire edits under budget."

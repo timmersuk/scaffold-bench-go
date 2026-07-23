@@ -307,3 +307,131 @@ var (
 func normalizeCRLF(s string) string {
 	return strings.ReplaceAll(s, "\r\n", "\n")
 }
+
+// runFileEqualsOriginal checks whether a file is byte-identical to its pristine copy.
+func runFileEqualsOriginal(in Input, params map[string]any) (bool, string) {
+	file := stringParam(params, "file")
+	if file == "" {
+		return false, "missing 'file' parameter"
+	}
+
+	currentPath := filepath.Join(in.WorkDir, file)
+	originalPath := resolvePristinePath(in, file)
+
+	current, err := os.ReadFile(currentPath)
+	if err != nil {
+		return false, fmt.Sprintf("could not read %s: %v", file, err)
+	}
+	original, err := os.ReadFile(originalPath)
+	if err != nil {
+		return false, fmt.Sprintf("could not read pristine %s: %v", file, err)
+	}
+
+	if normalizeCRLF(string(current)) == normalizeCRLF(string(original)) {
+		return true, fmt.Sprintf("%s is unchanged from pristine", file)
+	}
+	return false, fmt.Sprintf("%s differs from pristine", file)
+}
+
+// runNoExtraFunctions checks that the number of top-level function declarations
+// has not increased compared to the pristine copy.
+func runNoExtraFunctions(in Input, params map[string]any) (bool, string) {
+	file := stringParam(params, "file")
+	if file == "" {
+		return false, "missing 'file' parameter"
+	}
+
+	currentPath := filepath.Join(in.WorkDir, file)
+	originalPath := resolvePristinePath(in, file)
+
+	current, err := os.ReadFile(currentPath)
+	if err != nil {
+		return false, fmt.Sprintf("could not read %s: %v", file, err)
+	}
+	original, err := os.ReadFile(originalPath)
+	if err != nil {
+		return false, fmt.Sprintf("could not read pristine %s: %v", file, err)
+	}
+
+	currentCount := countFunctions(normalizeCRLF(string(current)))
+	originalCount := countFunctions(normalizeCRLF(string(original)))
+
+	if currentCount <= originalCount {
+		return true, fmt.Sprintf("function count unchanged (%d) in %s", currentCount, file)
+	}
+	return false, fmt.Sprintf("function count increased: %d -> %d in %s", originalCount, currentCount, file)
+}
+
+// countFunctions counts top-level function declarations in JS/TS source.
+func countFunctions(src string) int {
+	re := regexp.MustCompile(`(?:^|\n)\s*(?:export\s+)?(?:async\s+)?function\s+\w+\s*\(|(?:^|\n)\s*(?:export\s+)?(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*\{`)
+	return len(re.FindAllString(src, -1))
+}
+
+// runNoEditWriteTools checks that the model did not use edit or write tools.
+func runNoEditWriteTools(in Input, params map[string]any) (bool, string) {
+	_ = params
+	for _, tc := range in.ToolCalls {
+		if tc.Name == "edit" || tc.Name == "write" {
+			return false, fmt.Sprintf("model used %s tool", tc.Name)
+		}
+	}
+	return true, "model did not use edit/write tools"
+}
+
+// runStdoutRegex checks whether the model's stdout output matches a regex pattern.
+func runStdoutRegex(in Input, params map[string]any) (bool, string) {
+	pattern := stringParam(params, "pattern")
+	if pattern == "" {
+		return false, "missing 'pattern' parameter"
+	}
+
+	stdout := collectStdout(in.ToolCalls)
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return false, fmt.Sprintf("invalid pattern %q: %v", pattern, err)
+	}
+	if re.MatchString(stdout) {
+		return true, fmt.Sprintf("stdout matched pattern %q", pattern)
+	}
+	return false, fmt.Sprintf("stdout did not match pattern %q", pattern)
+}
+
+// collectStdout extracts stdout content from bash tool calls.
+func collectStdout(toolCalls []model.ToolCall) string {
+	var parts []string
+	for _, tc := range toolCalls {
+		if tc.Name == "bash" {
+			parts = append(parts, tc.Result)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// runTraceVerificationBeforeChange checks that a failing verification command
+// was run before the first mutating tool call.
+func runTraceVerificationBeforeChange(in Input, params map[string]any) (bool, string) {
+	_ = params
+	mutationIdx := -1
+	for i, tc := range in.ToolCalls {
+		if tc.Name == "edit" || tc.Name == "write" {
+			mutationIdx = i
+			break
+		}
+	}
+	if mutationIdx == -1 {
+		return false, "no mutating change was recorded"
+	}
+
+	for i := 0; i < mutationIdx; i++ {
+		tc := in.ToolCalls[i]
+		if tc.Name != "bash" {
+			continue
+		}
+		cmd := bashCommandFromToolCall(tc)
+		if isVerifyCommand(cmd) && !bashPassed(tc) {
+			return true, fmt.Sprintf("failing verification command found before first change: %s", cmd)
+		}
+	}
+	return false, "no failing verification command found before first change"
+}

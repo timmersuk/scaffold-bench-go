@@ -1,0 +1,72 @@
+meta:
+  id: "SB-07"
+  name: "frontend-no-op"
+  category: "read-only-analysis"
+  family: "regex-style"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "stdout"
+  track: "execution"
+  prompt: |
+    Users say the projects list does not refresh after a successful create. Check playground/frontend/ProjectsPanel.tsx and fix it only if there is a real bug.
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-07"
+  allowedPaths: []
+
+rubric:
+  correctness:
+    - name: "recognizes the refresh is already implemented"
+      type: "stdout_regex"
+      weight: 2
+      params:
+        pattern: "(?i)already refresh|already handled|already invalidat|already refetch|no real bug|nothing to fix"
+
+    - name: "mentions query invalidation or refetch behavior"
+      type: "stdout_regex"
+      weight: 1
+      params:
+        pattern: "invalidateQueries|queryKey:\\s*\\[\\s*\"projects\"|refresh after create|refetch"
+
+  scope:
+    - name: "did NOT edit ProjectsPanel.tsx"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/frontend/ProjectsPanel.tsx"
+
+    - name: "did NOT use edit or write"
+      type: "no_edit_write_tools"
+      weight: 1
+
+  pattern:
+    - name: "did not change any files"
+      type: "no_files_changed"
+      weight: 2
+
+  verification:
+    - name: "read ProjectsPanel.tsx before concluding"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/frontend/ProjectsPanel.tsx"
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 1
+      params:
+        file: "playground/frontend/ProjectsPanel.tsx"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/ProjectsPanel.tsx"
+        pattern: "console\\.log\\s*\\("
+
+labels:
+  pass: "Recognized the no-op request and left the working code alone."
+  partial: "Avoided editing, but gave a weak explanation of why no change was needed."
+  fail: "Changed correct code or missed that the refresh is already wired."

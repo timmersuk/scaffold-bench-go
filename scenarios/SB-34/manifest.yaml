@@ -1,0 +1,86 @@
+meta:
+  id: "SB-34"
+  name: "build-a-plugin"
+  category: "implementation"
+  family: "spec-impl"
+  difficulty: "high"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Create a WordPress plugin at `playground/php-wp/plugins/recent-posts-widget.php`. It should implement a `[recent_posts count="N"]` shortcode that renders a `<ul>` of recent post titles. Requirements: count should be clamped between 1 and 10 (default: read from the `rpw_default_count` option, fallback 5), all output must be escaped, the count parameter must be sanitized with absint, include a valid WordPress plugin header comment.
+
+requires:
+  - "php"
+
+workspace:
+  root: "playground/php-wp"
+  pristineDir: "_fixtures/playground/SB-34"
+  allowedPaths:
+    - "playground/php-wp/plugins/recent-posts-widget.php"
+
+rubric:
+  correctness:
+    - name: "renders <ul> with <li> items"
+      type: "command"
+      weight: 1
+      params:
+        command: "php -r \"require 'playground/php-wp/wp-stubs.php'; require 'playground/php-wp/plugins/recent-posts-widget.php'; $out = do_shortcode_tag('recent_posts', ['count' => 5]); if (strpos($out, '<ul') !== false && strpos($out, '<li') !== false) { echo 'PASS'; exit(0); } else { echo 'FAIL: ' . $out; exit(1); }\""
+        timeout_ms: 10000
+
+    - name: "source clamps count between 1 and 10 (min/max)"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/php-wp/plugins/recent-posts-widget.php"
+        pattern: "min\\s*\\(\\s*10|max\\s*\\(\\s*1"
+
+    - name: "valid WordPress plugin header present"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/php-wp/plugins/recent-posts-widget.php"
+        pattern: "Plugin Name\\s*:"
+
+  scope:
+    - name: "only plugins/recent-posts-widget.php created"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/php-wp/plugins/recent-posts-widget.php"
+
+  pattern:
+    - name: "uses absint() on count input"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/php-wp/plugins/recent-posts-widget.php"
+        pattern: "absint\\s*\\("
+
+    - name: "uses esc_html() and shortcode returns (not echoes) output"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/php-wp/plugins/recent-posts-widget.php"
+        pattern: "esc_html\\s*\\("
+
+  verification:
+    - name: "read wp-stubs or php-wp directory before writing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/php-wp/wp-stubs.php"
+
+  cleanup:
+    - name: "no var_dump or error_log left in plugin"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/php-wp/plugins/recent-posts-widget.php"
+        pattern: "var_dump\\s*\\(|error_log\\s*\\("
+
+labels:
+  pass: "Plugin implements shortcode with correct clamping, escaping, and plugin header."
+  partial: "Plugin partially implemented but some rubric checks failed."
+  fail: "Plugin not created or has XSS/missing plugin header."

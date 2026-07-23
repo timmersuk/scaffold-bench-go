@@ -1,0 +1,80 @@
+meta:
+  id: "SB-08"
+  name: "frontend-find-the-right-file"
+  category: "surgical-edit"
+  family: "regex-style"
+  difficulty: "high"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Refund amounts render as `$-5.00` instead of `-$5.00` in the invoices UI. Fix the bug with the smallest correct change.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-08"
+  allowedPaths:
+    - "playground/frontend/currency.ts"
+
+hiddenFixtures:
+  - src: "_fixtures/behaviors/SB-08/currency.behavior.test.mjs"
+    dest: "playground/frontend/currency.behavior.test.mjs"
+
+rubric:
+  correctness:
+    - name: "formatCurrency renders negatives as -$ and positives as $ (behavioral)"
+      type: "behavioral_test"
+      weight: 3
+      params:
+        runner: "bun-test"
+        testFile: "playground/frontend/currency.behavior.test.mjs"
+        files:
+          - "playground/frontend/currency.ts"
+
+  scope:
+    - name: "edited only currency.ts"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/frontend/currency.ts"
+
+  pattern:
+    - name: "invoice UI left untouched"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/frontend/InvoiceTable.tsx"
+
+    - name: "refund summary left untouched"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/frontend/RefundSummary.tsx"
+
+  verification:
+    - name: "searched before editing"
+      type: "trace_search_before_edit"
+      weight: 1
+
+  cleanup:
+    - name: "read before changing files (turn-ordered)"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/frontend/currency.ts"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/currency.ts"
+        pattern: "console\\.log\\s*\\("
+
+labels:
+  pass: "Found the shared formatting helper and fixed the real source of the bug."
+  partial: "Fixed the display issue, but with extra drift or the wrong file ownership."
+  fail: "Did not find the right file or changed the wrong layer."

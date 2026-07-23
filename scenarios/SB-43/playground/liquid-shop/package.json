@@ -1,0 +1,7 @@
+{
+  "name": "liquid-shop",
+  "private": true,
+  "dependencies": {
+    "liquidjs": "^10.0.0"
+  }
+}

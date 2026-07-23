@@ -1,0 +1,82 @@
+meta:
+  id: "SB-09"
+  name: "frontend-reuse-existing-abstraction"
+  category: "scope-discipline"
+  family: "regex-style"
+  difficulty: "high"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Show team members in playground/frontend/TeamSidebar.tsx. Reuse any existing abstraction in playground/frontend rather than reimplementing data loading.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-09"
+  allowedPaths:
+    - "playground/frontend/TeamSidebar.tsx"
+
+rubric:
+  correctness:
+    - name: "TeamSidebar imports existing useTeamMembers hook"
+      type: "ast_file_imports"
+      weight: 1
+      params:
+        file: "playground/frontend/TeamSidebar.tsx"
+        module: "./useTeamMembers"
+
+    - name: "TeamSidebar calls useTeamMembers"
+      type: "ast_file_calls"
+      weight: 1
+      params:
+        file: "playground/frontend/TeamSidebar.tsx"
+        callee: "useTeamMembers"
+
+    - name: "TeamSidebar does not reimplement fetching"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/TeamSidebar.tsx"
+        pattern: "useQuery\\s*\\(|fetch\\s*\\(|useEffect\\s*\\("
+
+  scope:
+    - name: "edited only TeamSidebar.tsx"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/frontend/TeamSidebar.tsx"
+
+  pattern:
+    - name: "existing hook left untouched"
+      type: "file_equals_original"
+      weight: 2
+      params:
+        file: "playground/frontend/useTeamMembers.ts"
+
+  verification:
+    - name: "searched before editing"
+      type: "trace_search_before_edit"
+      weight: 1
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 1
+      params:
+        file: "playground/frontend/TeamSidebar.tsx"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/TeamSidebar.tsx"
+        pattern: "console\\.log\\s*\\("
+
+labels:
+  pass: "Reused the existing abstraction instead of reimplementing it locally."
+  partial: "Got the feature working, but drifted away from the existing abstraction."
+  fail: "Did not reuse the existing data-loading abstraction."

@@ -1,0 +1,102 @@
+meta:
+  id: "SB-24"
+  name: "react-hook-form-zod-resolver"
+  category: "scope-discipline"
+  family: "regex-style"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "regex-shape"
+  track: "execution"
+  prompt: |
+    `SignupForm.tsx` should use the existing `signupSchema.ts` for client-side validation. Wire it up via `react-hook-form`'s zod resolver. Don't change the schema or the API call.
+
+requires: []
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-24"
+  allowedPaths:
+    - "playground/frontend/SignupForm.tsx"
+
+rubric:
+  correctness:
+    - name: "imports zodResolver from @hookform/resolvers/zod (AST)"
+      type: "ast_file_imports"
+      weight: 1
+      params:
+        file: "playground/frontend/SignupForm.tsx"
+        source: "@hookform/resolvers/zod"
+
+    - name: "imports signupSchema from ./signupSchema"
+      type: "file_contains"
+      weight: 0.5
+      params:
+        file: "playground/frontend/SignupForm.tsx"
+        pattern: "from\\s+[\"']\\./signupSchema(?:\\.(?:ts|js))?[\"']"
+
+    - name: "useForm passes resolver: zodResolver(signupSchema) (AST)"
+      type: "ast_use_form_uses_resolver"
+      weight: 1
+      params:
+        file: "playground/frontend/SignupForm.tsx"
+        schemaName: "signupSchema"
+
+    - name: "type uses z.infer<typeof signupSchema>"
+      type: "file_contains"
+      weight: 0.5
+      params:
+        file: "playground/frontend/SignupForm.tsx"
+        pattern: "z\\.infer<typeof signupSchema>|SignupFormValues"
+
+  scope:
+    - name: "edited only SignupForm.tsx"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/frontend/SignupForm.tsx"
+
+    - name: "signupSchema.ts byte-identical"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/frontend/signupSchema.ts"
+
+  pattern:
+    - name: "apiClient.ts byte-identical"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/frontend/apiClient.ts"
+
+    - name: "did not introduce new validation library"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/SignupForm.tsx"
+        pattern: "\\byup\\b|\\bjoi\\b|\\bvest\\b|\\bsuperstruct\\b"
+
+  verification:
+    - name: "searched before editing"
+      type: "trace_search_before_edit"
+      weight: 1
+      params: {}
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 1
+      params:
+        file: "playground/frontend/SignupForm.tsx"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/SignupForm.tsx"
+        pattern: "console\\.log\\s*\\("
+
+labels:
+  pass: "Resolver wired with inferred types, scope clean."
+  partial: "Resolver wired but redeclared the type, or also touched the schema unnecessarily."
+  fail: "Didn't use the existing schema, or rewrote form structure."

@@ -1,0 +1,71 @@
+meta:
+  id: "SB-36"
+  name: "migration-backfill"
+  category: "verify-and-repair"
+  family: "regex-style"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Our database migration `playground/sql-reports/migrations/002.sql` crashes when applied to a database with existing client records. It adds a `tier` column as NOT NULL but doesn't handle existing rows. Fix the migration so it runs cleanly — existing data should be preserved.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-36"
+  allowedPaths:
+    - "playground/sql-reports/migrations/002.sql"
+
+rubric:
+  correctness:
+    - name: "migration applies without error to seeded database"
+      type: "command"
+      weight: 3
+      params:
+        command: "bun test ./playground/sql-reports/migrations/test-migration.ts"
+        timeout_ms: 15000
+
+  scope:
+    - name: "only migrations/002.sql changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/sql-reports/migrations/002.sql"
+
+    - name: "schema.sql unchanged from original"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/sql-reports/schema.sql"
+
+  pattern:
+    - name: "uses DEFAULT or UPDATE backfill (proper SQL approach)"
+      type: "file_contains"
+      weight: 2
+      params:
+        file: "playground/sql-reports/migrations/002.sql"
+        pattern: "DEFAULT\\s+['\"]?\\w+['\"]?|UPDATE\\s+clients\\s+SET\\s+tier"
+
+  verification:
+    - name: "read migration file before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/sql-reports/migrations/002.sql"
+
+  cleanup:
+    - name: "no debug artifacts in migration file"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/sql-reports/migrations/002.sql"
+        pattern: "console\\.|--\\s*debug|--\\s*TODO"
+
+labels:
+  pass: "Migration backfill fixed; applies cleanly with existing rows preserved."
+  partial: "Migration partially fixed."
+  fail: "Migration still fails on seeded database."

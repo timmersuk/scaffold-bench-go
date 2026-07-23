@@ -1,0 +1,85 @@
+meta:
+  id: "SB-37"
+  name: "reporting-query"
+  category: "implementation"
+  family: "regex-style"
+  difficulty: "high"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Write a SQL query `playground/sql-reports/queries/monthly-net-revenue.sql` that shows monthly net revenue per client (payments minus refunds). Active clients should appear even in months where they only had refunds and no payments. Order by client_id, month.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-37"
+  allowedPaths:
+    - "playground/sql-reports/queries/monthly-net-revenue.sql"
+
+rubric:
+  correctness:
+    - name: "dataset 1: client 1 net revenue in 2024-01 is 450"
+      type: "command"
+      weight: 2
+      params:
+        command: "bun playground/sql-reports/test-net-revenue.ts"
+        timeout_ms: 15000
+
+    - name: "dataset 2: refund-only month appears with negative net revenue"
+      type: "command"
+      weight: 2
+      params:
+        command: "bun playground/sql-reports/test-net-revenue-refund.ts"
+        timeout_ms: 15000
+
+  scope:
+    - name: "only new query file written (schema/seed/existing queries untouched)"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/sql-reports/queries/monthly-net-revenue.sql"
+
+    - name: "schema.sql unchanged from original"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/sql-reports/schema.sql"
+
+  pattern:
+    - name: "uses UNION ALL or LEFT JOIN subqueries (not naive single-table GROUP BY)"
+      type: "file_contains"
+      weight: 2
+      params:
+        file: "playground/sql-reports/queries/monthly-net-revenue.sql"
+        pattern: "UNION\\s+ALL|LEFT\\s+JOIN"
+
+    - name: "no naive single-table GROUP BY on payments only"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/sql-reports/queries/monthly-net-revenue.sql"
+        pattern: "^SELECT\\s+p\\.\\s*client_id.*FROM\\s+payments\\s+p\\s+GROUP\\s+BY"
+
+  verification:
+    - name: "read schema or seed before writing query"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/sql-reports/schema.sql"
+
+  cleanup:
+    - name: "no commented-out SQL in query file"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/sql-reports/queries/monthly-net-revenue.sql"
+        pattern: "^\\s*--.*SELECT"
+
+labels:
+  pass: "Monthly net revenue query correct, handles refund-only months."
+  partial: "Query partially correct — some edge cases missing."
+  fail: "Query missing or does not handle refund-only months."

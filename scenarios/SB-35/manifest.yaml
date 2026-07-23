@@ -1,0 +1,85 @@
+meta:
+  id: "SB-35"
+  name: "join-fanout"
+  category: "surgical-edit"
+  family: "regex-style"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Our order totals report is producing inflated numbers. An order with 3 line items and 2 shipments is showing 6× the actual total. The query is in `playground/sql-reports/queries/totals.sql` — fix the SQL without touching `db.ts`.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-35"
+  allowedPaths:
+    - "playground/sql-reports/queries/totals.sql"
+
+rubric:
+  correctness:
+    - name: "client 1 total is 350 (not double-counted)"
+      type: "command"
+      weight: 3
+      params:
+        command: "bun playground/sql-reports/test-totals.ts"
+        timeout_ms: 15000
+
+  scope:
+    - name: "only totals.sql changed, db.ts untouched"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/sql-reports/queries/totals.sql"
+
+    - name: "db.ts unchanged from original"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/sql-reports/db.ts"
+
+  pattern:
+    - name: "uses subquery or derived table (not DISTINCT bandaid)"
+      type: "file_contains"
+      weight: 2
+      params:
+        file: "playground/sql-reports/queries/totals.sql"
+        pattern: "JOIN\\s*\\(\\s*SELECT|FROM\\s*\\(\\s*SELECT|WITH\\s+\\w+"
+
+    - name: "no DISTINCT bandaid"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/sql-reports/queries/totals.sql"
+        pattern: "SELECT\\s+DISTINCT\\s+o\\.client_id|DISTINCT\\s+oi\\.amount"
+
+  verification:
+    - name: "read totals.sql before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/sql-reports/queries/totals.sql"
+
+  cleanup:
+    - name: "no commented-out SQL experiments"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/sql-reports/queries/totals.sql"
+        pattern: "^\\s*--.*SELECT"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/sql-reports/queries/totals.sql"
+        pattern: "console\\.log"
+
+labels:
+  pass: "Join fanout fixed with subquery; totals correct."
+  partial: "Partial fix — some checks failing."
+  fail: "Query still produces inflated totals or db.ts was modified."

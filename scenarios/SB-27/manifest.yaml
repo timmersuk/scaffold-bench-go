@@ -1,0 +1,94 @@
+meta:
+  id: "SB-27"
+  name: "sse-final-line"
+  category: "surgical-edit"
+  family: "regex-style"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Our SSE client drops the last event from the stream when it doesn't end with a blank line. This happens with some server implementations. The parser is in `playground/streaming/lib/sse-client.mjs`.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground/streaming"
+  pristineDir: "_fixtures/playground/SB-27"
+  allowedPaths:
+    - "playground/streaming/lib/sse-client.mjs"
+
+hiddenFixtures:
+  - src: "_fixtures/behaviors/SB-27/sse-client.behavior.test.mjs"
+    dest: "playground/streaming/lib/sse-client.behavior.test.mjs"
+
+rubric:
+  correctness:
+    - name: "parses first event (hello)"
+      type: "behavioral_test"
+      weight: 1
+      params:
+        runner: "bun-test"
+        testFile: "playground/streaming/lib/sse-client.behavior.test.mjs"
+        files:
+          - "playground/streaming/lib/sse-client.mjs"
+
+    - name: "parses final event without trailing newline (world)"
+      type: "behavioral_test"
+      weight: 2
+      params:
+        runner: "bun-test"
+        testFile: "playground/streaming/lib/sse-client.behavior.test.mjs"
+        files:
+          - "playground/streaming/lib/sse-client.mjs"
+
+  scope:
+    - name: "only sse-client.mjs changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/streaming/lib/sse-client.mjs"
+
+  pattern:
+    - name: "adds buffer flush after loop (minimal fix)"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/streaming/lib/sse-client.mjs"
+        pattern: "if\\s*\\(\\s*buffer"
+
+    - name: "keeps split-on-double-newline approach"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/streaming/lib/sse-client.mjs"
+        pattern: "split\\s*\\(\\s*[\"'\\n]{2,}[\"']\\s*\\)"
+
+  verification:
+    - name: "read sse-client.mjs before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/streaming/lib/sse-client.mjs"
+
+  cleanup:
+    - name: "no console.log"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/streaming/lib/sse-client.mjs"
+        pattern: "console\\.log\\s*\\("
+
+    - name: "no debug output left"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/streaming/lib/sse-client.mjs"
+        pattern: "console\\.(warn|error|debug)\\s*\\("
+
+labels:
+  pass: "SSE parser correctly flushes the final event without trailing newline."
+  partial: "Partial fix — some events parsed but final-line bug remains."
+  fail: "Final event still dropped when stream lacks trailing blank line."

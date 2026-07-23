@@ -1,0 +1,86 @@
+meta:
+  id: "SB-40"
+  name: "deploy-script-exclude"
+  category: "scope-discipline"
+  family: "regex-style"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Our deploy script is accidentally syncing `.env` files to production. Update `playground/ops/deploy.sh` to exclude `.env` from the rsync transfer. Don't restructure the script — just add the exclude to the existing rsync command.
+
+requires:
+  - "shellcheck"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-40"
+  allowedPaths:
+    - "playground/ops/deploy.sh"
+
+rubric:
+  correctness:
+    - name: "rsync line contains --exclude and .env"
+      type: "file_contains"
+      weight: 2
+      params:
+        file: "playground/ops/deploy.sh"
+        pattern: "--exclude.*\\.env"
+
+    - name: "shellcheck passes"
+      type: "command"
+      weight: 1
+      params:
+        command: "shellcheck playground/ops/deploy.sh"
+        timeout_ms: 10000
+
+  scope:
+    - name: "only deploy.sh changed"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/ops/deploy.sh"
+
+    - name: "minimal diff (line count unchanged)"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/ops/deploy.sh"
+        tolerance_lines: 1
+
+  pattern:
+    - name: "correct rsync exclude syntax (--exclude='.env')"
+      type: "file_contains"
+      weight: 2
+      params:
+        file: "playground/ops/deploy.sh"
+        pattern: "--exclude=['\"]\\.env['\"]"
+
+  verification:
+    - name: "read deploy.sh before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/ops/deploy.sh"
+
+  cleanup:
+    - name: "no debug additions"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/ops/deploy.sh"
+        pattern: "echo.*debug|printf.*debug"
+
+    - name: "no spurious file changes"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/ops/deploy.sh"
+
+labels:
+  pass: "rsync excludes .env; shellcheck clean; minimal change."
+  partial: "Exclude added but syntax issues or scope drift."
+  fail: ".env not excluded from rsync or shellcheck fails."

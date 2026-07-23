@@ -1,0 +1,91 @@
+meta:
+  id: "SB-13"
+  name: "iterate-to-green"
+  category: "verify-and-repair"
+  family: "regression"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Use the provided test to iteratively fix playground/normalizeTag.mjs. Verify the failure first, then keep running the test until it passes. Change only what is necessary.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-13"
+  allowedPaths:
+    - "playground/normalizeTag.mjs"
+
+hiddenFixtures:
+  - src: "_fixtures/behaviors/SB-13/normalizeTag.behavior.test.mjs"
+    dest: "playground/normalizeTag.behavior.test.mjs"
+
+rubric:
+  correctness:
+    - name: "normalizeTag produces correct slugs (behavioral)"
+      type: "behavioral_test"
+      weight: 20
+      params:
+        runner: "bun-test"
+        testFile: "playground/normalizeTag.behavior.test.mjs"
+        files:
+          - "playground/normalizeTag.mjs"
+
+    - name: "normalizeTag test file left untouched"
+      type: "file_equals_original"
+      weight: 10
+      params:
+        file: "playground/normalizeTag.test.mjs"
+
+  scope:
+    - name: "edited only normalizeTag.mjs"
+      type: "files_changed_only"
+      weight: 20
+      params:
+        allowed:
+          - "playground/normalizeTag.mjs"
+
+  pattern:
+    - name: "no extra functions introduced"
+      type: "no_extra_functions"
+      weight: 10
+      params:
+        file: "playground/normalizeTag.mjs"
+
+    - name: "kept existing export shape"
+      type: "file_contains"
+      weight: 10
+      params:
+        file: "playground/normalizeTag.mjs"
+        pattern: "export\\s+function\\s+normalizeTag"
+
+  verification:
+    - name: "verified the failure before changing code"
+      type: "trace_verification_before_change"
+      weight: 3
+
+    - name: "reran verification and got a passing result"
+      type: "trace_verification_after_change"
+      weight: 4
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 10
+      params:
+        file: "playground/normalizeTag.mjs"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 10
+      params:
+        file: "playground/normalizeTag.mjs"
+        pattern: "console\\.log\\s*\\("
+
+labels:
+  pass: "Worked through an intermediate failure and iterated the implementation to a passing result."
+  partial: "Reached a correct fix, but did not demonstrate the full iterate-to-green loop."
+  fail: "Did not complete the iterative recovery loop correctly."

@@ -1,0 +1,86 @@
+meta:
+  id: "SB-30"
+  name: "webhook-hmac"
+  category: "implementation"
+  family: "spec-impl"
+  difficulty: "high"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Implement the webhook handler described in `playground/hono-api/specs/webhooks.md`. The endpoint should be `POST /webhooks/orders`. Verify the `X-Signature: sha256=<hmac>` header, return 401 on mismatch, dedupe replayed events by `event_id`, and return 200 for replays.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground/hono-api"
+  pristineDir: "_fixtures/playground/SB-30"
+  allowedPaths:
+    - "playground/hono-api/src/routes/webhooks.ts"
+    - "playground/hono-api/src/index.ts"
+    - "playground/hono-api/schema.sql"
+
+rubric:
+  correctness:
+    - name: "webhook test suite passes"
+      type: "behavioral_test"
+      weight: 3
+      params:
+        runner: "bun-test"
+        testFile: "playground/hono-api/tests/sb-30-webhooks.test.ts"
+        files:
+          - "playground/hono-api/src/routes/webhooks.ts"
+          - "playground/hono-api/src/index.ts"
+
+  scope:
+    - name: "only webhook handler + index + schema changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/hono-api/src/routes/webhooks.ts"
+          - "playground/hono-api/src/index.ts"
+          - "playground/hono-api/schema.sql"
+
+  pattern:
+    - name: "uses constant-time compare (timingSafeEqual)"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/routes/webhooks.ts"
+        pattern: "timingSafeEqual|timing\\.safe"
+
+    - name: "no === string comparison for HMAC"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/routes/webhooks.ts"
+        pattern: "[!=]==\\s*expected|expected\\s*[!=]==|sig\\s*[!=]==\\s*exp"
+
+  verification:
+    - name: "read webhook spec before writing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/hono-api/specs/webhooks.md"
+
+  cleanup:
+    - name: "no console.log in webhook handler"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/routes/webhooks.ts"
+        pattern: "console\\.log\\s*\\("
+
+    - name: "webhook handler mounted in index.ts"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/index.ts"
+        pattern: "webhooksRoutes|webhook"
+
+labels:
+  pass: "Webhook handler passes all tests with timing-safe compare and dedup."
+  partial: "Some webhook tests pass but timing safety or dedup missing."
+  fail: "Webhook handler not implemented or tests fail."

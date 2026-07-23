@@ -328,3 +328,202 @@ func removeComments(src string) string {
 	re := regexp.MustCompile(`//[^\n]*|/\*[\s\S]*?\*/`)
 	return re.ReplaceAllString(src, "")
 }
+
+// runComponentUsesHook checks whether a component function body contains a call
+// to the named hook. Mirrors upstream componentUsesHook.
+func runComponentUsesHook(in Input, params map[string]any) (bool, string) {
+	file := stringParam(params, "file")
+	component := stringParam(params, "component")
+	hook := stringParam(params, "hook")
+	if file == "" {
+		return false, "missing 'file' parameter"
+	}
+	if component == "" {
+		return false, "missing 'component' parameter"
+	}
+	if hook == "" {
+		return false, "missing 'hook' parameter"
+	}
+
+	content, err := os.ReadFile(filepath.Join(in.WorkDir, file))
+	if err != nil {
+		return false, fmt.Sprintf("could not read %s: %v", file, err)
+	}
+	src := removeComments(string(content))
+
+	body := extractDeclarationBlock(src, component)
+	if body == "" {
+		return false, fmt.Sprintf("could not find component %q in %s", component, file)
+	}
+
+	callRe := regexp.MustCompile(`\b` + regexp.QuoteMeta(hook) + `\s*\(`)
+	if callRe.MatchString(body) {
+		return true, fmt.Sprintf("%s uses %s in %s", component, hook, file)
+	}
+	return false, fmt.Sprintf("%s does not use %s in %s", component, hook, file)
+}
+
+// runFirstDirective checks the first module directive (e.g. "use client") in a file.
+// Mirrors upstream firstDirective.
+func runFirstDirective(in Input, params map[string]any) (bool, string) {
+	file := stringParam(params, "file")
+	expected := stringParam(params, "expected")
+	if file == "" {
+		return false, "missing 'file' parameter"
+	}
+	if expected == "" {
+		return false, "missing 'expected' parameter"
+	}
+
+	content, err := os.ReadFile(filepath.Join(in.WorkDir, file))
+	if err != nil {
+		return false, fmt.Sprintf("could not read %s: %v", file, err)
+	}
+	src := removeComments(string(content))
+
+	re := regexp.MustCompile(`^\s*["']([^"']+)["']\s*;?`)
+	m := re.FindStringSubmatch(src)
+	if len(m) < 2 {
+		return false, fmt.Sprintf("no module directive found in %s", file)
+	}
+	if m[1] == expected {
+		return true, fmt.Sprintf("first directive is %q in %s", expected, file)
+	}
+	return false, fmt.Sprintf("first directive is %q, expected %q in %s", m[1], expected, file)
+}
+
+// runFileImports checks whether a file imports from one of the specified modules.
+// Mirrors upstream importsOf with a contains check.
+func runFileImports(in Input, params map[string]any) (bool, string) {
+	file := stringParam(params, "file")
+	module := stringParam(params, "module")
+	if file == "" {
+		return false, "missing 'file' parameter"
+	}
+	if module == "" {
+		return false, "missing 'module' parameter"
+	}
+
+	content, err := os.ReadFile(filepath.Join(in.WorkDir, file))
+	if err != nil {
+		return false, fmt.Sprintf("could not read %s: %v", file, err)
+	}
+	src := removeComments(string(content))
+
+	re := regexp.MustCompile(`from\s+["']` + regexp.QuoteMeta(module) + `["']`)
+	if re.MatchString(src) {
+		return true, fmt.Sprintf("%s imports from %s", file, module)
+	}
+	return false, fmt.Sprintf("%s does not import from %s", file, module)
+}
+
+// runFileNotImports checks whether a file does NOT import from the specified module.
+func runFileNotImports(in Input, params map[string]any) (bool, string) {
+	file := stringParam(params, "file")
+	module := stringParam(params, "module")
+	if file == "" {
+		return false, "missing 'file' parameter"
+	}
+	if module == "" {
+		return false, "missing 'module' parameter"
+	}
+
+	content, err := os.ReadFile(filepath.Join(in.WorkDir, file))
+	if err != nil {
+		return false, fmt.Sprintf("could not read %s: %v", file, err)
+	}
+	src := removeComments(string(content))
+
+	re := regexp.MustCompile(`from\s+["']` + regexp.QuoteMeta(module) + `["']`)
+	if !re.MatchString(src) {
+		return true, fmt.Sprintf("%s does not import from %s", file, module)
+	}
+	return false, fmt.Sprintf("%s unexpectedly imports from %s", file, module)
+}
+
+// runMutationRefreshesQuery checks whether a useMutation call has an
+// onSuccess/onSettled handler that calls invalidateQueries or refetchQueries
+// with the specified queryKey. Mirrors upstream mutationRefreshesQuery.
+func runMutationRefreshesQuery(in Input, params map[string]any) (bool, string) {
+	file := stringParam(params, "file")
+	mutation := stringParam(params, "mutation")
+	queryKey := stringParam(params, "queryKey")
+	if file == "" {
+		return false, "missing 'file' parameter"
+	}
+	if mutation == "" {
+		return false, "missing 'mutation' parameter"
+	}
+	if queryKey == "" {
+		return false, "missing 'queryKey' parameter"
+	}
+
+	content, err := os.ReadFile(filepath.Join(in.WorkDir, file))
+	if err != nil {
+		return false, fmt.Sprintf("could not read %s: %v", file, err)
+	}
+	src := removeComments(string(content))
+
+	body := extractDeclarationBlock(src, mutation)
+	if body == "" {
+		return false, fmt.Sprintf("could not find mutation %q in %s", mutation, file)
+	}
+
+	hasUseMutation := regexp.MustCompile(`\buseMutation\s*\(`).MatchString(body)
+	if !hasUseMutation {
+		return false, fmt.Sprintf("%s does not use useMutation in %s", mutation, file)
+	}
+
+	hasHandler := regexp.MustCompile(`\b(?:onSuccess|onSettled)\s*[:(]`).MatchString(body)
+	if !hasHandler {
+		return false, fmt.Sprintf("%s has no onSuccess/onSettled handler in %s", mutation, file)
+	}
+
+	hasInvalidate := regexp.MustCompile(`\b(?:invalidateQueries|refetchQueries)\s*\(`).MatchString(body)
+	if !hasInvalidate {
+		return false, fmt.Sprintf("%s handler does not call invalidateQueries/refetchQueries in %s", mutation, file)
+	}
+
+	keyRe := regexp.MustCompile(`["']` + regexp.QuoteMeta(queryKey) + `["']`)
+	if !keyRe.MatchString(body) {
+		return false, fmt.Sprintf("%s handler does not reference queryKey %q in %s", mutation, queryKey, file)
+	}
+
+	return true, fmt.Sprintf("%s invalidates query %q in %s", mutation, queryKey, file)
+}
+
+// runUseFormUsesResolver checks whether a useForm call wires resolver to the
+// named schema. Mirrors upstream useFormUsesResolver.
+func runUseFormUsesResolver(in Input, params map[string]any) (bool, string) {
+	file := stringParam(params, "file")
+	schema := stringParam(params, "schema")
+	if file == "" {
+		return false, "missing 'file' parameter"
+	}
+	if schema == "" {
+		return false, "missing 'schema' parameter"
+	}
+
+	content, err := os.ReadFile(filepath.Join(in.WorkDir, file))
+	if err != nil {
+		return false, fmt.Sprintf("could not read %s: %v", file, err)
+	}
+	src := removeComments(string(content))
+
+	hasUseForm := regexp.MustCompile(`\buseForm\s*\(`).MatchString(src)
+	if !hasUseForm {
+		return false, fmt.Sprintf("no useForm call found in %s", file)
+	}
+
+	hasResolver := regexp.MustCompile(`\bresolver\s*:\s*\w+Resolver\s*\(\s*` + regexp.QuoteMeta(schema) + `\s*\)`).MatchString(src)
+	if hasResolver {
+		return true, fmt.Sprintf("useForm uses resolver with %s in %s", schema, file)
+	}
+
+	hasResolver2 := regexp.MustCompile(`\bresolver\s*:\s*\w+\s*\(\s*` + regexp.QuoteMeta(schema) + `\s*\)`).MatchString(src)
+	if hasResolver2 {
+		return true, fmt.Sprintf("useForm uses resolver with %s in %s", schema, file)
+	}
+
+	return false, fmt.Sprintf("useForm does not wire resolver to %s in %s", schema, file)
+}

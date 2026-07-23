@@ -1,0 +1,82 @@
+meta:
+  id: "SB-38"
+  name: "actions-trigger"
+  category: "surgical-edit"
+  family: "regex-style"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Our CI pipeline is running production deploys on every pull request — we only want deploys to trigger on push to main. The workflow is at `playground/ops/.github/workflows/deploy.yml`. Fix the trigger/condition without touching the test or build jobs.
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-38"
+  allowedPaths:
+    - "playground/ops/.github/workflows/deploy.yml"
+
+rubric:
+  correctness:
+    - name: "deploy job unreachable on PR events"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/ops/.github/workflows/deploy.yml"
+        pattern: "pull_request"
+
+    - name: "push to main still triggers deploy"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/ops/.github/workflows/deploy.yml"
+        pattern: "push:"
+
+  scope:
+    - name: "only workflow file changed"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/ops/.github/workflows/deploy.yml"
+
+    - name: "test and build jobs still present"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/ops/.github/workflows/deploy.yml"
+        pattern: "^\\s{2}(test|build):"
+
+  pattern:
+    - name: "fix in trigger section (not a separate workflow)"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/ops/.github/workflows/deploy.yml"
+        pattern: "pull_request"
+
+  verification:
+    - name: "read workflow file before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/ops/.github/workflows/deploy.yml"
+
+  cleanup:
+    - name: "no commented-out YAML lines"
+      type: "no_added_comments"
+      weight: 1
+      params:
+        file: "playground/ops/.github/workflows/deploy.yml"
+
+    - name: "no spurious changes"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/ops/.github/workflows/deploy.yml"
+
+labels:
+  pass: "Deploy job restricted to push events; test/build jobs unchanged."
+  partial: "Partial fix — some conditions met but not all."
+  fail: "Deploy still runs on pull_request or test/build jobs broken."

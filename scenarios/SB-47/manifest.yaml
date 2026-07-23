@@ -1,0 +1,76 @@
+meta:
+  id: "SB-47"
+  name: "go-nil-map"
+  category: "verify-and-repair"
+  family: "bug-fix"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Our Go stats endpoint panics when it receives the first POST request. The handler is in `playground/go-api/handlers.go`. The provided test (`handlers_test.go`) currently fails — fix the handler so the test passes.
+
+requires:
+  - "go"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-47"
+  allowedPaths:
+    - "playground/go-api/handlers.go"
+
+rubric:
+  correctness:
+    - name: "go test ./... passes after fix"
+      type: "command"
+      weight: 3
+      params:
+        command: "cd playground/go-api && go test ./..."
+        timeout_ms: 60000
+
+  scope:
+    - name: "only handlers.go changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/go-api/handlers.go"
+
+  pattern:
+    - name: "uses make() or map literal for counts initialization"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/go-api/handlers.go"
+        pattern: "make\\s*\\(\\s*map\\[string\\]int\\s*\\)|map\\[string\\]int\\s*\\{"
+
+    - name: "no nil-check workaround"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/go-api/handlers.go"
+        pattern: "counts\\s*==\\s*nil"
+
+  verification:
+    - name: "failing go test before first change"
+      type: "trace_verification_before_change"
+      weight: 1
+      params: {}
+
+    - name: "passing go test after first change"
+      type: "trace_verification_after_change"
+      weight: 1
+      params: {}
+
+  cleanup:
+    - name: "no fmt.Println debug output added"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/go-api/handlers.go"
+        pattern: "fmt\\.Println\\s*\\("
+
+labels:
+  pass: "Nil map fixed with make(); test passes; no debug output."
+  partial: "Partial fix — test may pass but idiom or scope issues remain."
+  fail: "Test still panics or nil map not properly initialized."

@@ -1,0 +1,73 @@
+meta:
+  id: "SB-31"
+  name: "woo-double-discount"
+  category: "surgical-edit"
+  family: "bug-fix"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Members are getting a double discount at checkout — 19% instead of 10%. The cart total filter is in `playground/php-wp/inc/pricing.php` and it's also referenced in `functions.php`. Fix the discount application without rewriting the pricing logic.
+
+requires:
+  - "php"
+
+workspace:
+  root: "playground/php-wp"
+  pristineDir: "_fixtures/playground/SB-31"
+  allowedPaths:
+    - "playground/php-wp/functions.php"
+    - "playground/php-wp/inc/pricing.php"
+
+rubric:
+  correctness:
+    - name: "get_cart_total(100) returns exactly 90"
+      type: "command"
+      weight: 3
+      params:
+        command: "php -r \"require 'playground/php-wp/wp-stubs.php'; require 'playground/php-wp/inc/pricing.php'; require 'playground/php-wp/functions.php'; echo get_cart_total(100);\" | findstr /C:90"
+        timeout_ms: 10000
+
+  scope:
+    - name: "only functions.php or pricing.php changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/php-wp/functions.php"
+          - "playground/php-wp/inc/pricing.php"
+
+  pattern:
+    - name: "uses remove_filter or single registration"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/php-wp/functions.php"
+        pattern: "remove_filter\\s*\\("
+
+    - name: "pricing math (0.9 multiplier) not rewritten"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/php-wp/inc/pricing.php"
+
+  verification:
+    - name: "read pricing.php or functions.php before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/php-wp/functions.php"
+
+  cleanup:
+    - name: "no var_dump or error_log left"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/php-wp/functions.php"
+        pattern: "var_dump\\s*\\(|error_log\\s*\\("
+
+labels:
+  pass: "Double discount fixed; cart total is exactly 90% of input."
+  partial: "Discount partially fixed but some rubric checks failed."
+  fail: "Double discount not fixed; cart total is still 81."

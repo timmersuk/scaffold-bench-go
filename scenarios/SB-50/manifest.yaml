@@ -1,0 +1,76 @@
+meta:
+  id: "SB-50"
+  name: "rust-off-by-one"
+  category: "verify-and-repair"
+  family: "bug-fix"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    The `running_totals` function in `playground/rust-lib/src/lib.rs` fails its test — the last element is missing from the result. Fix the function, not the test.
+
+requires:
+  - "cargo"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-50"
+  allowedPaths:
+    - "playground/rust-lib/src/lib.rs"
+
+rubric:
+  correctness:
+    - name: "cargo test passes"
+      type: "command"
+      weight: 3
+      params:
+        command: "cd playground/rust-lib && cargo test"
+        timeout_ms: 120000
+
+  scope:
+    - name: "only lib.rs changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/rust-lib/src/lib.rs"
+
+  pattern:
+    - name: "no .take(n - 1) in running_totals"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/rust-lib/src/lib.rs"
+        pattern: "\\.take\\s*\\(\\s*n\\s*-\\s*1\\s*\\)"
+
+    - name: "test assertion vec![1, 3, 6, 10] unchanged"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/rust-lib/src/lib.rs"
+        pattern: "vec!\\[1,\\s*3,\\s*6,\\s*10\\]"
+
+  verification:
+    - name: "failing cargo test before first change"
+      type: "trace_verification_before_change"
+      weight: 1
+      params: {}
+
+    - name: "passing cargo test after first change"
+      type: "trace_verification_after_change"
+      weight: 1
+      params: {}
+
+  cleanup:
+    - name: "no println! debug macros left"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/rust-lib/src/lib.rs"
+        pattern: "println!\\s*\\("
+
+labels:
+  pass: "Off-by-one fixed in function; cargo test passes; test assertion unchanged."
+  partial: "Test passes but test was modified or other issues remain."
+  fail: "cargo test still fails."

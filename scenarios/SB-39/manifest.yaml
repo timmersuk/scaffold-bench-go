@@ -1,0 +1,82 @@
+meta:
+  id: "SB-39"
+  name: "dockerfile-layers"
+  category: "verify-and-repair"
+  family: "regex-style"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Our Docker builds are slow — every code change re-runs `bun install` from scratch because dependencies aren't cached separately. Also, the build fails with a lockfile error. Fix `playground/ops/Dockerfile` to properly layer the dependency installation before copying source files.
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-39"
+  allowedPaths:
+    - "playground/ops/Dockerfile"
+
+rubric:
+  correctness:
+    - name: "manifest COPY comes before bun install"
+      type: "file_contains"
+      weight: 2
+      params:
+        file: "playground/ops/Dockerfile"
+        pattern: "COPY\\s+package\\.json"
+
+    - name: "correct lockfile name (bun.lock not bun.lockb)"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/ops/Dockerfile"
+        pattern: "bun\\.lockb"
+
+  scope:
+    - name: "only Dockerfile changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/ops/Dockerfile"
+
+  pattern:
+    - name: "idiomatic layer pattern (no --no-frozen-lockfile hack)"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/ops/Dockerfile"
+        pattern: "--no-frozen-lockfile"
+
+    - name: "COPY . . present after install"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/ops/Dockerfile"
+        pattern: "COPY\\s+\\.\\s+\\."
+
+  verification:
+    - name: "read Dockerfile before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/ops/Dockerfile"
+
+  cleanup:
+    - name: "no leftover debug comments"
+      type: "no_added_comments"
+      weight: 1
+      params:
+        file: "playground/ops/Dockerfile"
+
+    - name: "no spurious file changes"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/ops/Dockerfile"
+
+labels:
+  pass: "Dockerfile properly layers deps before source; correct lockfile."
+  partial: "Partial fix — some layer issues remain."
+  fail: "Dockerfile still copies source before install or has wrong lockfile."

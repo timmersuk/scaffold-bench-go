@@ -1,0 +1,92 @@
+meta:
+  id: "SB-43"
+  name: "build-a-section"
+  category: "implementation"
+  family: "feature-add"
+  difficulty: "high"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Create a new Shopify section at `playground/liquid-shop/sections/product-spotlight.liquid`. Requirements: a text setting for the heading, a range or number setting for product limit (1-8, default 4), a checkbox for show_price, render prices using the `money` filter, and include a valid `{% schema %}` block with all these settings defined.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-43"
+  allowedPaths:
+    - "playground/liquid-shop/sections/product-spotlight.liquid"
+
+rubric:
+  correctness:
+    - name: "schema parses and has heading, product_limit, show_price settings"
+      type: "command"
+      weight: 1
+      params:
+        command: "cd playground/liquid-shop && bun install --silent 2>/dev/null && bun test-spotlight-schema.ts"
+        timeout_ms: 30000
+
+    - name: "renders products via liquid"
+      type: "command"
+      weight: 1
+      params:
+        command: "cd playground/liquid-shop && bun install --silent 2>/dev/null && bun test-spotlight-render.ts"
+        timeout_ms: 30000
+
+    - name: "product_limit default is 4"
+      type: "command"
+      weight: 1
+      params:
+        command: "cd playground/liquid-shop && bun install --silent 2>/dev/null && bun test-spotlight-schema.ts"
+        timeout_ms: 30000
+
+  scope:
+    - name: "only product-spotlight.liquid created"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/liquid-shop/sections/product-spotlight.liquid"
+
+  pattern:
+    - name: "money filter used; show_price=false hides prices"
+      type: "command"
+      weight: 1
+      params:
+        command: "cd playground/liquid-shop && bun install --silent 2>/dev/null && bun test-spotlight-render.ts"
+        timeout_ms: 30000
+
+    - name: "featured-grid.liquid unchanged"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/liquid-shop/sections/featured-grid.liquid"
+
+  verification:
+    - name: "read existing section for reference before creating"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/liquid-shop/sections/featured-grid.liquid"
+
+  cleanup:
+    - name: "no debug output in template"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/liquid-shop/sections/product-spotlight.liquid"
+        pattern: "\\{\\{[-\\s]*dump|console\\.log"
+
+    - name: "no spurious file changes"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/liquid-shop/sections/product-spotlight.liquid"
+
+labels:
+  pass: "Section renders products with money filter; schema valid; no scope drift."
+  partial: "Schema valid but rendering issues or scope drift."
+  fail: "Missing schema or products not rendered."

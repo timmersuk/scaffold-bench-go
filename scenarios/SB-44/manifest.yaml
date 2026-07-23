@@ -1,0 +1,83 @@
+meta:
+  id: "SB-44"
+  name: "nav-stacking"
+  category: "scope-discipline"
+  family: "bug-fix"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    The mobile navigation dropdown opens behind the hero banner on our site. The CSS is at `playground/css-ui/styles/main.css`. Fix the stacking issue without adding !important or inline styles, and without restructuring the hero styles.
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-44"
+  allowedPaths:
+    - "playground/css-ui/styles/main.css"
+
+rubric:
+  correctness:
+    - name: "nav or nav-menu has positioned context with z-index > 1 and no !important"
+      type: "file_contains"
+      weight: 2
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "\\.nav(-menu)?\\s*\\{[^}]*(position\\s*:\\s*(relative|absolute|fixed|sticky))[^}]*z-index\\s*:\\s*[2-9]"
+
+    - name: "no !important used"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "!important"
+
+    - name: "hero position:relative z-index:1 preserved"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "\\.hero\\s*\\{[^}]*position\\s*:\\s*relative[^}]*z-index\\s*:\\s*1"
+
+  scope:
+    - name: "only main.css changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/css-ui/styles/main.css"
+
+  pattern:
+    - name: "fix is on .nav or .nav-menu without !important"
+      type: "file_contains"
+      weight: 2
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "\\.nav(-menu)?\\s*\\{[^}]*(position|z-index)"
+
+  verification:
+    - name: "read main.css before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/css-ui/styles/main.css"
+
+  cleanup:
+    - name: "no commented-out CSS experiments"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/css-ui/styles/main.css"
+        pattern: "/\\*[\\s\\S]*?(stacking|z-index|position)[\\s\\S]*?\\*/"
+
+    - name: "no spurious file changes"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/css-ui/styles/main.css"
+
+labels:
+  pass: "Nav stacking fixed cleanly — positioned context above hero, no !important."
+  partial: "Stacking fix attempted but with antipatterns or wrong scope."
+  fail: "Nav still renders behind hero or !important used."

@@ -1,0 +1,92 @@
+meta:
+  id: "SB-05"
+  name: "frontend-stack-loyalty"
+  category: "surgical-edit"
+  family: "regex-style"
+  difficulty: "high"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Finish playground/frontend/ActivityFeed.tsx using the existing frontend stack already established in playground/frontend. Keep the component shape. Do not introduce fetch, manual async state, or new client wrappers.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-05"
+  allowedPaths:
+    - "playground/frontend/ActivityFeed.tsx"
+
+rubric:
+  correctness:
+    - name: "component uses useQuery"
+      type: "ast_component_uses_hook"
+      weight: 1
+      params:
+        file: "playground/frontend/ActivityFeed.tsx"
+        component: "ActivityFeed"
+        hook: "useQuery"
+
+    - name: "component imports existing apiClient"
+      type: "ast_file_imports"
+      weight: 1
+      params:
+        file: "playground/frontend/ActivityFeed.tsx"
+        module: "./apiClient"
+
+    - name: "no manual fetch or useEffect"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/ActivityFeed.tsx"
+        pattern: "fetch\\s*\\(|useEffect\\s*\\("
+
+  scope:
+    - name: "edited only ActivityFeed.tsx"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/frontend/ActivityFeed.tsx"
+
+  pattern:
+    - name: "existing api client left untouched"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/frontend/apiClient.ts"
+
+    - name: "does not introduce manual async state"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/ActivityFeed.tsx"
+        pattern: "setIsLoading|setActivities|setError"
+
+  verification:
+    - name: "read files before changing them (turn-ordered)"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/frontend/ActivityFeed.tsx"
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 1
+      params:
+        file: "playground/frontend/ActivityFeed.tsx"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/ActivityFeed.tsx"
+        pattern: "console\\.log\\s*\\("
+
+labels:
+  pass: "Implemented the feature with the established stack and no architecture drift."
+  partial: "Implemented the feature, but with some unnecessary stack drift or extra machinery."
+  fail: "Did not use the established stack for data loading."

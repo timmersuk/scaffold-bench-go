@@ -14,8 +14,8 @@ A single-binary Go + Vite port of [scaffold-bench](https://github.com/1337hero/s
 | Domain model & REST API | ✅ Designed | Core entities and `/api/*` routes defined in ADRs / issues |
 | SQLite schema & persistence | ✅ Done | Migrations, runs/scenario_runs/events tables, WAL |
 | Scenario manifest schema | ✅ Done | `docs/design/scenario-manifest.md`, YAML/JSON loader, Go evaluator interface |
-| Run engine & evaluator | 🚧 Partial | Core checks complete; `requires` enforcement and trace-semantic fixes landed (#24, #25). Native Go AST checks implemented for SB-25 (#14, ADR-0002). Parallel tool execution with hooks implemented (#17). Preflight warmup and metadata collection implemented (#18). Remaining gap: port remaining 48 scenarios. |
-| Scenarios ported | 🚧 In progress | SB-01 and SB-25 ported and validated against golden workspaces; remaining 48 scenarios not started |
+| Run engine & evaluator | ✅ Done | All checks implemented; all 50 scenarios ported |
+| Scenarios ported | ✅ Done | All 50 scenarios (SB-01 through SB-50) ported and validated |
 | Frontend wiring | 🚧 Partial | `/api/scenarios`, `/api/models`, and SSE run stream are wired; Dashboard view implemented in PR #29. RunHistory implemented and reuses Dashboard three-pane layout. OneShotLab fully implemented in PR #42. |
 | One-shot lab | ✅ Done | Full implementation: engine, API routes, frontend UI, 15 prompts, latest-per-prompt semantics (ADR-0007) |
 | Reports / leaderboard | ✅ Done | Backend aggregation (PR #43); Report UI enhancement complete with sortable leaderboard, awards grid, category heatmap, token-score scatter, context growth chart, recent runs table |
@@ -49,7 +49,7 @@ All closed design issues from the wayfinder map:
 
 - [x] [#16 Port the first real scenario (SB-01) and validate its score](https://github.com/timmersuk/scaffold-bench-go/issues/16)
 - [x] Port SB-25 and validate native AST checks against upstream gate fixtures
-- [ ] Port SB-02 through SB-24, SB-26 through SB-50 (not yet ticketed in detail)
+- [x] Port SB-02 through SB-24, SB-26 through SB-50 — all 48 remaining scenarios ported
 
 ### API / models
 

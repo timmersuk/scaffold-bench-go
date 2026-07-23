@@ -1,0 +1,93 @@
+meta:
+  id: "SB-42"
+  name: "astro-frontmatter-field"
+  category: "scope-discipline"
+  family: "feature-add"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Add an optional `heroImage` field to the blog post collection in `playground/astro-site/src/content.config.ts`, and render it in the blog post page template at `playground/astro-site/src/pages/blog/[slug].astro`. The notes collection and other pages should not be touched.
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-42"
+  allowedPaths:
+    - "playground/astro-site/src/content.config.ts"
+    - "playground/astro-site/src/pages/blog/[slug].astro"
+
+rubric:
+  correctness:
+    - name: "blog schema has heroImage as optional"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/astro-site/src/content.config.ts"
+        pattern: "heroImage\\s*:\\s*z\\.string\\(\\)(?:\\.url\\(\\))?\\.optional\\(\\)"
+
+    - name: "notes schema does NOT have heroImage"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/astro-site/src/content.config.ts"
+        pattern: "(?<=const notes[\\s\\S]*?)heroImage"
+
+    - name: "template renders heroImage conditionally"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/astro-site/src/pages/blog/[slug].astro"
+        pattern: "\\{post\\.data\\.heroImage\\s*&&|heroImage\\s*\\?\\s*|\\{post\\.data\\.heroImage\\s*\\?"
+
+  scope:
+    - name: "only content.config.ts and [slug].astro changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/astro-site/src/content.config.ts"
+          - "playground/astro-site/src/pages/blog/[slug].astro"
+
+  pattern:
+    - name: "heroImage field is optional not required"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/astro-site/src/content.config.ts"
+        pattern: "heroImage\\s*:\\s*z\\.string\\(\\)(?:\\.url\\(\\))?\\.optional\\(\\)"
+
+    - name: "template renders heroImage defensively"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/astro-site/src/pages/blog/[slug].astro"
+        pattern: "\\{post\\.data\\.heroImage\\s*&&|heroImage\\s*\\?\\s*|\\{post\\.data\\.heroImage\\s*\\?"
+
+  verification:
+    - name: "read content.config.ts or [slug].astro before editing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/astro-site/src/content.config.ts"
+
+  cleanup:
+    - name: "no commented-out heroImage experiments"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/astro-site/src/pages/blog/[slug].astro"
+        pattern: "//.*heroImage"
+
+    - name: "no spurious file changes"
+      type: "files_changed_only"
+      weight: 1
+      params:
+        allowed:
+          - "playground/astro-site/src/content.config.ts"
+          - "playground/astro-site/src/pages/blog/[slug].astro"
+
+labels:
+  pass: "heroImage optional in blog only; template guards render; notes untouched."
+  partial: "heroImage added but wrong scope or missing guard."
+  fail: "heroImage missing or notes schema polluted."

@@ -1,0 +1,85 @@
+meta:
+  id: "SB-48"
+  name: "go-json-endpoint"
+  category: "implementation"
+  family: "feature-add"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Implement the `POST /items` endpoint in `playground/go-api/`. The handler should decode JSON `{"name": string, "qty": number}`, return 400 with `{"error": "..."}` if name is missing or qty is less than 1, and return 201 with the item echoed back plus a generated `id` field. A test file is provided — make it pass using only the standard library.
+
+requires:
+  - "go"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-48"
+  allowedPaths:
+    - "playground/go-api/items.go"
+    - "playground/go-api/handlers.go"
+    - "playground/go-api/items_test.go"
+
+rubric:
+  correctness:
+    - name: "go test ./... passes (all 3 test cases green)"
+      type: "command"
+      weight: 3
+      params:
+        command: "cd playground/go-api && go test ./..."
+        timeout_ms: 60000
+
+  scope:
+    - name: "items_test.go unchanged from original"
+      type: "file_equals_original"
+      weight: 2
+      params:
+        file: "playground/go-api/items_test.go"
+
+  pattern:
+    - name: "uses JSON error shape in response"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/go-api/items.go"
+        pattern: "\"error\""
+
+    - name: "uses StatusCreated or 201"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/go-api/items.go"
+        pattern: "StatusCreated|201"
+
+  verification:
+    - name: "read items_test.go before implementing"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/go-api/items_test.go"
+
+    - name: "passing go test after first change"
+      type: "trace_verification_after_change"
+      weight: 1
+      params: {}
+
+  cleanup:
+    - name: "no fmt.Println debug output"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/go-api/items.go"
+        pattern: "fmt\\.Println\\s*\\("
+
+    - name: "no external imports in items.go"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/go-api/items.go"
+        pattern: "\"[a-z]+\\.[a-z]+/"
+
+labels:
+  pass: "POST /items implemented correctly; all 3 test cases pass."
+  partial: "Implementation partial — some test cases fail or scope/pattern issues."
+  fail: "Implementation missing or test cases fail."

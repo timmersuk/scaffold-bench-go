@@ -1,0 +1,78 @@
+meta:
+  id: "SB-06"
+  name: "frontend-red-herring"
+  category: "read-only-analysis"
+  family: "regex-style"
+  difficulty: "low"
+  rubricKind: "10pt"
+  signalType: "stdout"
+  track: "execution"
+  prompt: |
+    I think there's a bug in playground/frontend/ReportsPage.tsx because playground/frontend/ReportsTable.tsx doesn't fetch its own data. Review both files. If there's a real bug, explain it, but do not change code unless necessary.
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-06"
+  allowedPaths: []
+
+rubric:
+  correctness:
+    - name: "recognizes there is no real bug"
+      type: "stdout_regex"
+      weight: 2
+      params:
+        pattern: "(?i)no (real )?bug|nothing is wrong|already correct|pattern is fine|this is intentional"
+
+    - name: "mentions page-owned query / prop-passing pattern"
+      type: "stdout_regex"
+      weight: 1
+      params:
+        pattern: "(?i)page .*owns.*query|owner of the query|pass(es|ing)? data .*props|child .*presentational|avoid duplicate fetch|container component|useQuery.*pass(es|ing)?.*prop|pass(es|ing)?.*(reports?|data).*(as )?prop"
+
+  scope:
+    - name: "did NOT edit ReportsPage.tsx"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/frontend/ReportsPage.tsx"
+
+    - name: "did NOT edit ReportsTable.tsx"
+      type: "file_equals_original"
+      weight: 1
+      params:
+        file: "playground/frontend/ReportsTable.tsx"
+
+  pattern:
+    - name: "does not recommend moving the fetch into the child"
+      type: "stdout_regex"
+      weight: 1
+      params:
+        pattern: "(?i)page .*owns|prop.*pass|already.*correct|no.*bug|presentational|nothing to (fix|change)"
+
+    - name: "did NOT use edit or write tool"
+      type: "no_edit_write_tools"
+      weight: 1
+
+  verification:
+    - name: "did not change any files"
+      type: "no_files_changed"
+      weight: 1
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 1
+      params:
+        file: "playground/frontend/ReportsPage.tsx"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/ReportsPage.tsx"
+        pattern: "console\\.log\\s*\\("
+
+labels:
+  pass: "Recognized the red herring and preserved the existing ownership pattern."
+  partial: "Avoided editing, but explanation was incomplete or drifted toward unnecessary changes."
+  fail: "Invented a bug or tried to rewrite the data ownership pattern."

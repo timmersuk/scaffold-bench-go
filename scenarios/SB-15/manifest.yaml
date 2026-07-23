@@ -1,0 +1,78 @@
+meta:
+  id: "SB-15"
+  name: "hono-cursor-pagination"
+  category: "implementation"
+  family: "spec-impl"
+  difficulty: "high"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Read the spec at playground/hono-api/specs/cursor-pagination.md and implement the feature described there. Follow the patterns already established in playground/hono-api/.
+
+requires:
+  - "bun"
+
+workspace:
+  root: "playground/hono-api"
+  pristineDir: "_fixtures/playground/SB-15"
+  allowedPaths:
+    - "playground/hono-api/src/routes/items.ts"
+
+rubric:
+  correctness:
+    - name: "bun tests pass"
+      type: "command"
+      weight: 3
+      params:
+        command: "cd playground/hono-api && bun install --frozen-lockfile 2>/dev/null || bun install && bun test tests/sb-15-cursor-pagination.test.ts"
+        timeout_ms: 60000
+
+  scope:
+    - name: "only expected files changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/hono-api/src/routes/items.ts"
+
+  pattern:
+    - name: "keeps deleted_at IS NULL filter"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/routes/items.ts"
+        pattern: "deleted_at\\s+IS\\s+NULL"
+
+    - name: "keeps ORDER BY id DESC"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/routes/items.ts"
+        pattern: "ORDER\\s+BY\\s+id\\s+DESC"
+
+  verification:
+    - name: "read the spec file"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/hono-api/specs/cursor-pagination.md"
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/routes/items.ts"
+
+    - name: "no console.log"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/hono-api/src/routes/items.ts"
+        pattern: "console\\.log"
+
+labels:
+  pass: "All tests pass with correct response shape and preserved filters."
+  partial: "Some tests fail, or implementation pieces missing."
+  fail: "Did not implement cursor pagination correctly."

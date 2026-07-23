@@ -172,12 +172,34 @@ func (e *Evaluator) runCheck(ctx context.Context, in Input, check Check) model.C
 		result.Pass, result.Detail = runTraceVerificationAfterChange(in, check.Params)
 	case "no_added_comments":
 		result.Pass, result.Detail = runNoAddedComments(in, check.Params)
+	case "file_equals_original":
+		result.Pass, result.Detail = runFileEqualsOriginal(in, check.Params)
+	case "no_extra_functions":
+		result.Pass, result.Detail = runNoExtraFunctions(in, check.Params)
+	case "no_edit_write_tools":
+		result.Pass, result.Detail = runNoEditWriteTools(in, check.Params)
+	case "stdout_regex":
+		result.Pass, result.Detail = runStdoutRegex(in, check.Params)
+	case "trace_verification_before_change":
+		result.Pass, result.Detail = runTraceVerificationBeforeChange(in, check.Params)
 	case "ast_property_contains_call":
 		result.Pass, result.Detail = runPropertyContainsCall(in, check.Params)
 	case "ast_file_calls":
 		result.Pass, result.Detail = runFileCalls(in, check.Params)
 	case "ast_jsx_passes_prop":
 		result.Pass, result.Detail = runJsxPassesProp(in, check.Params)
+	case "ast_component_uses_hook":
+		result.Pass, result.Detail = runComponentUsesHook(in, check.Params)
+	case "ast_first_directive":
+		result.Pass, result.Detail = runFirstDirective(in, check.Params)
+	case "ast_file_imports":
+		result.Pass, result.Detail = runFileImports(in, check.Params)
+	case "ast_file_not_imports":
+		result.Pass, result.Detail = runFileNotImports(in, check.Params)
+	case "ast_mutation_refreshes_query":
+		result.Pass, result.Detail = runMutationRefreshesQuery(in, check.Params)
+	case "ast_use_form_uses_resolver":
+		result.Pass, result.Detail = runUseFormUsesResolver(in, check.Params)
 	default:
 		result.Detail = fmt.Sprintf("unsupported check type %q", check.Type)
 	}

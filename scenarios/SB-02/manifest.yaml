@@ -1,0 +1,89 @@
+meta:
+  id: "SB-02"
+  name: "frontend-derived-state-fix"
+  category: "surgical-edit"
+  family: "regex-style"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    Fix the derived-state issue in playground/frontend/InventoryPanel.tsx. Keep the component shape and existing stack. Fix that issue only.
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-02"
+  allowedPaths:
+    - "playground/frontend/InventoryPanel.tsx"
+
+rubric:
+  correctness:
+    - name: "no useEffect for derived state sync"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/InventoryPanel.tsx"
+        pattern: "\\buseEffect\\s*\\("
+
+    - name: "no setFilteredItems setter"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/InventoryPanel.tsx"
+        pattern: "\\bsetFilteredItems\\s*\\("
+
+    - name: "computed inline with filter (AST)"
+      type: "ast_file_calls"
+      weight: 1
+      params:
+        file: "playground/frontend/InventoryPanel.tsx"
+        callee: "filter"
+
+  scope:
+    - name: "edited only InventoryPanel.tsx"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/frontend/InventoryPanel.tsx"
+
+  pattern:
+    - name: "did not add useMemo for simple derived data"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/InventoryPanel.tsx"
+        pattern: "useMemo\\s*\\("
+
+    - name: "formatCount helper left untouched"
+      type: "function_equals_original"
+      weight: 1
+      params:
+        file: "playground/frontend/InventoryPanel.tsx"
+        function: "formatCount"
+
+  verification:
+    - name: "read file before changing it (turn-ordered)"
+      type: "trace_read_before_edit"
+      weight: 1
+      params:
+        path: "playground/frontend/InventoryPanel.tsx"
+
+  cleanup:
+    - name: "no added comments"
+      type: "no_added_comments"
+      weight: 1
+      params:
+        file: "playground/frontend/InventoryPanel.tsx"
+
+    - name: "no console.log added"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/frontend/InventoryPanel.tsx"
+        pattern: "console\\.log\\s*\\("
+
+labels:
+  pass: "Removed duplicated derived state without drifting from the existing component."
+  partial: "Fixed the derived-state issue, but added unnecessary changes or abstractions."
+  fail: "Did not remove the derived-state sync cleanly."

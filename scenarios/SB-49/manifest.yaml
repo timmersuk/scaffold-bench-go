@@ -1,0 +1,76 @@
+meta:
+  id: "SB-49"
+  name: "rust-borrow"
+  category: "surgical-edit"
+  family: "bug-fix"
+  difficulty: "medium"
+  rubricKind: "10pt"
+  signalType: "behavioral"
+  track: "execution"
+  prompt: |
+    There's a borrow error in `playground/rust-lib/src/lib.rs` — `cargo check` fails because a vector is moved into a function and then used again. Fix the function signature to avoid the move without cloning.
+
+requires:
+  - "cargo"
+
+workspace:
+  root: "playground"
+  pristineDir: "_fixtures/playground/SB-49"
+  allowedPaths:
+    - "playground/rust-lib/src/lib.rs"
+
+rubric:
+  correctness:
+    - name: "cargo check passes"
+      type: "command"
+      weight: 3
+      params:
+        command: "cd playground/rust-lib && cargo check"
+        timeout_ms: 120000
+
+  scope:
+    - name: "only lib.rs changed"
+      type: "files_changed_only"
+      weight: 2
+      params:
+        allowed:
+          - "playground/rust-lib/src/lib.rs"
+
+  pattern:
+    - name: "no .clone() added"
+      type: "file_not_contains"
+      weight: 1
+      params:
+        file: "playground/rust-lib/src/lib.rs"
+        pattern: "\\.clone\\s*\\("
+
+    - name: "total_length takes a reference parameter"
+      type: "file_contains"
+      weight: 1
+      params:
+        file: "playground/rust-lib/src/lib.rs"
+        pattern: "fn\\s+total_length\\s*\\(\\s*\\w+\\s*:\\s*&"
+
+  verification:
+    - name: "ran cargo check to see the error before fixing"
+      type: "trace_verification_before_change"
+      weight: 1
+      params: {}
+
+    - name: "passing cargo check after first change"
+      type: "trace_verification_after_change"
+      weight: 1
+      params: {}
+
+  cleanup:
+    - name: "no println! debug macros added"
+      type: "file_not_contains"
+      weight: 2
+      params:
+        file: "playground/rust-lib/src/lib.rs"
+        pattern: "println!\\s*\\("
+
+labels:
+  pass: "Borrow error fixed by changing to slice reference; cargo check passes."
+  partial: "cargo check passes but clone used or scope issues."
+  fail: "cargo check still fails."
