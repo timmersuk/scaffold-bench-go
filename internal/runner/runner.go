@@ -305,6 +305,7 @@ func (e *Engine) runScenario(ctx context.Context, runID string, req StartRequest
 		"maxPoints":  scenario.MaxPoints,
 		"family":     scenario.Family,
 		"rubricKind": scenario.RubricKind,
+		"prompt":     scenario.Prompt,
 	})
 	startedAt := now
 	e.store.UpsertScenarioRun(model.ScenarioRun{
@@ -542,6 +543,8 @@ func (ar *activeRun) nextSeq() int64 {
 func runtimeEventPayload(ev model.RuntimeEvent) any {
 	switch ev.Type {
 	case model.EventAssistantDelta:
+		return map[string]any{"content": ev.Delta}
+	case model.EventReasoningDelta:
 		return map[string]any{"content": ev.Delta}
 	case model.EventAssistant:
 		return map[string]any{"content": ev.Content}

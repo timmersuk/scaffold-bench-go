@@ -233,7 +233,7 @@ func (e *Engine) runPrompt(ctx context.Context, runID string, req StartRequest, 
 			"promptId": prompt.ID,
 			"content":  delta,
 		})
-	})
+	}, nil)
 
 	wallTimeMs := time.Since(startTime).Milliseconds()
 	finishTime := time.Now().UnixMilli()

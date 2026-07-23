@@ -29,6 +29,7 @@ export interface RunSummary {
   model: string;
   totalPoints: number;
   maxPoints: number;
+  scenarioIds: string[];
 }
 
 export interface RunDetail {
@@ -39,7 +40,8 @@ export interface RunDetail {
   model: string;
   totalPoints: number;
   maxPoints: number;
-  scenarios: ScenarioResult[];
+  scenarioIds: string[];
+  batchRunId?: string;
 }
 
 export interface ScenarioResult {
@@ -218,6 +220,27 @@ export interface OneshotLatestRun {
   results: OneshotResult[];
 }
 
+export interface BatchRunConfig {
+  modelIds: string[];
+  scenarioIds: string[];
+  runsPerModel: number;
+  warmupDuration: number;
+  harness: string;
+}
+
+export interface BatchRun {
+  id: string;
+  config: BatchRunConfig;
+  status: "running" | "completed" | "interrupted" | "failed";
+  startedAt: number;
+  finishedAt?: number;
+}
+
+export interface BatchRunDetail {
+  batch: BatchRun;
+  runs: RunSummary[];
+}
+
 export type PersistedEventBase = { seq: number; ts: number };
 
 export type ToolCall = { name: string; args: string; turn: number; result?: unknown };
@@ -295,6 +318,7 @@ export type PersistedEvent =
       maxPoints: number;
       family?: string;
       rubricKind?: string;
+      prompt?: string;
     })
   | (PersistedEventBase & {
       type: "scenario_finished";
@@ -327,6 +351,12 @@ export type PersistedEvent =
       scenarioId: string;
       content: string;
     })
+  | (PersistedEventBase & {
+      type: "reasoning_delta";
+      runId: string;
+      scenarioId: string;
+      content: string;
+    })
   | (PersistedEventBase & { type: "tool_call"; runId: string; scenarioId: string; call: ToolCall })
   | (PersistedEventBase & {
       type: "tool_result";
@@ -342,7 +372,7 @@ export type PersistedEvent =
       metrics: ModelMetrics;
     });
 
-export type LogEntryKind = "assistant" | "tool" | "stdout" | "stderr" | "system";
+export type LogEntryKind = "assistant" | "reasoning" | "tool" | "stdout" | "stderr" | "system";
 
 export type LogEntry = {
   id: number;
@@ -372,8 +402,10 @@ export type ScenarioState = {
   turnFirstTokenMs?: number[];
   logs: LogEntry[];
   streamBuffer: string;
+  reasoningBuffer: string;
   liveMetrics?: ModelMetrics;
   evaluation?: ScenarioEvaluation;
+  prompt?: string;
 };
 
 export type RunStatus = "idle" | "warming_up" | "running" | "done" | "stopped" | "failed";
@@ -468,6 +500,7 @@ export function normalizeBackendEvent(ev: BackendEvent): PersistedEvent | null {
         maxPoints: typeof p.maxPoints === "number" ? p.maxPoints : 0,
         family: (p.family as string) ?? undefined,
         rubricKind: (p.rubricKind as string) ?? undefined,
+        prompt: (p.prompt as string) ?? undefined,
       };
     }
     case "scenario_finished": {
@@ -500,6 +533,12 @@ export function normalizeBackendEvent(ev: BackendEvent): PersistedEvent | null {
       return {
         ...base,
         type: "assistant_delta",
+        content: ((ev.payload as Record<string, unknown>)?.content as string) ?? "",
+      };
+    case "reasoning_delta":
+      return {
+        ...base,
+        type: "reasoning_delta",
         content: ((ev.payload as Record<string, unknown>)?.content as string) ?? "",
       };
     case "tool_call":

@@ -1,6 +1,6 @@
 import type { RunStatus } from "../types";
 import { formatElapsed } from "../lib/format";
-import { Play, Square, History } from "lucide-react";
+import { Play, Square } from "lucide-react";
 
 interface DashboardHeaderProps {
   totalPoints: number;
@@ -9,7 +9,6 @@ interface DashboardHeaderProps {
   status: RunStatus;
   onStart: () => void;
   onStop: () => void;
-  onHistory: () => void;
 }
 
 const BADGE_STYLES: Record<RunStatus, string> = {
@@ -28,7 +27,6 @@ export function DashboardHeader({
   status,
   onStart,
   onStop,
-  onHistory,
 }: DashboardHeaderProps) {
   const isRunning = status === "running" || status === "warming_up";
 
@@ -80,13 +78,6 @@ export function DashboardHeader({
           >
             <Square size={12} />
             Stop
-          </button>
-          <button
-            onClick={onHistory}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] uppercase tracking-wider border border-gray-200 bg-white text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-colors rounded-md"
-          >
-            <History size={12} />
-            History
           </button>
         </div>
       </div>

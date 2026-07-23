@@ -87,6 +87,7 @@ export function RunHistory({ onBack, onOpenRun }: RunHistoryProps) {
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Model</th>
+                  <th className="px-4 py-3 font-semibold">Scenarios</th>
                   <th className="px-4 py-3 font-semibold">Started</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
                   <th className="px-4 py-3 font-semibold">Score</th>
@@ -102,6 +103,15 @@ export function RunHistory({ onBack, onOpenRun }: RunHistoryProps) {
                         <span className="font-medium text-gray-900">{run.model}</span>
                       </div>
                       <div className="text-xs text-gray-400 mt-0.5 font-mono">{run.id}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-sm text-gray-700">
+                        {run.scenarioIds.length} scenario{run.scenarioIds.length !== 1 ? "s" : ""}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5 truncate max-w-xs">
+                        {run.scenarioIds.slice(0, 3).join(", ")}
+                        {run.scenarioIds.length > 3 && ` +${run.scenarioIds.length - 3} more`}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 text-gray-600">

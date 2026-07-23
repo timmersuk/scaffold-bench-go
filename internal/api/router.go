@@ -19,6 +19,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/timmersuk/scaffold-bench-go/internal/batch"
 	"github.com/timmersuk/scaffold-bench-go/internal/config"
 	"github.com/timmersuk/scaffold-bench-go/internal/model"
 	"github.com/timmersuk/scaffold-bench-go/internal/oneshot"
@@ -31,14 +32,15 @@ import (
 
 // Config holds the dependencies needed by the HTTP router.
 type Config struct {
-	Store        *storage.Store
-	Events       *realtime.Hub
-	Runner       Runner
+	Store         *storage.Store
+	Events        *realtime.Hub
+	Runner        Runner
 	OneshotRunner OneshotRunner
-	Registry     *runner.Registry
-	AppConfig    config.Config
-	BuildID      string
-	Frontend     fs.FS
+	BatchRunner   BatchRunner
+	Registry      *runner.Registry
+	AppConfig     config.Config
+	BuildID       string
+	Frontend      fs.FS
 }
 
 // Runner orchestrates benchmark runs.
@@ -54,6 +56,13 @@ type OneshotRunner interface {
 	Stop(runID string) error
 	ActiveRunID() (string, bool)
 	ListPrompts() ([]oneshot.PromptSummary, error)
+}
+
+// BatchRunner orchestrates batch runs.
+type BatchRunner interface {
+	Start(req batch.StartRequest) (string, error)
+	Stop(batchID string) error
+	ActiveBatchID() (string, bool)
 }
 
 // NewRouter builds the application http.Handler.
@@ -87,6 +96,7 @@ func NewRouter(cfg Config) (http.Handler, error) {
 		events:        cfg.Events,
 		runner:        cfg.Runner,
 		oneshotRunner: cfg.OneshotRunner,
+		batchRunner:   cfg.BatchRunner,
 		registry:      cfg.Registry,
 		appConfig:     cfg.AppConfig,
 		buildID:       cfg.BuildID,
@@ -111,6 +121,9 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	apiMux.HandleFunc("/oneshot/runs/", srv.handleOneshotRuns)
 	apiMux.HandleFunc("/oneshot/artifacts/", srv.withMethod(http.MethodGet, srv.handleOneshotArtifact))
 	apiMux.HandleFunc("/report/data", srv.withMethod(http.MethodGet, srv.handleReportData))
+	apiMux.HandleFunc("/batch-runs/active", srv.withMethod(http.MethodGet, srv.handleActiveBatchRun))
+	apiMux.HandleFunc("/batch-runs", srv.handleBatchRuns)
+	apiMux.HandleFunc("/batch-runs/", srv.handleBatchRuns)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", srv.withMethod(http.MethodGet, srv.handleHealth))
@@ -125,6 +138,7 @@ type server struct {
 	events        *realtime.Hub
 	runner        Runner
 	oneshotRunner OneshotRunner
+	batchRunner   BatchRunner
 	registry      *runner.Registry
 	appConfig     config.Config
 	buildID       string
@@ -472,6 +486,7 @@ func (s *server) handleListRuns(w http.ResponseWriter, r *http.Request) {
 			Model:       run.Model,
 			TotalPoints: zeroIfNil(run.TotalPoints),
 			MaxPoints:   zeroIfNil(run.MaxPoints),
+			ScenarioIDs: run.ScenarioIDs,
 		})
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -518,6 +533,7 @@ func (s *server) handleGetRun(w http.ResponseWriter, r *http.Request, runID stri
 		TotalPoints: zeroIfNil(run.TotalPoints),
 		MaxPoints:   zeroIfNil(run.MaxPoints),
 		Scenarios:   scenarioInfos,
+		BatchRunID:  run.BatchRunID,
 	})
 }
 
@@ -1034,13 +1050,14 @@ type updateRuntimeConfigRequest struct {
 }
 
 type runSummary struct {
-	ID          string `json:"id"`
-	StartedAt   int64  `json:"startedAt"`
-	FinishedAt  *int64 `json:"finishedAt,omitempty"`
-	Status      string `json:"status"`
-	Model       string `json:"model"`
-	TotalPoints int    `json:"totalPoints"`
-	MaxPoints   int    `json:"maxPoints"`
+	ID          string   `json:"id"`
+	StartedAt   int64    `json:"startedAt"`
+	FinishedAt  *int64   `json:"finishedAt,omitempty"`
+	Status      string   `json:"status"`
+	Model       string   `json:"model"`
+	TotalPoints int      `json:"totalPoints"`
+	MaxPoints   int      `json:"maxPoints"`
+	ScenarioIDs []string `json:"scenarioIds"`
 }
 
 type runDetail struct {
@@ -1052,6 +1069,7 @@ type runDetail struct {
 	TotalPoints int              `json:"totalPoints"`
 	MaxPoints   int              `json:"maxPoints"`
 	Scenarios   []scenarioResult `json:"scenarios"`
+	BatchRunID  string           `json:"batchRunId,omitempty"`
 }
 
 type scenarioResult struct {
@@ -1108,6 +1126,146 @@ func (s *server) withMethod(method string, next http.HandlerFunc) http.HandlerFu
 		}
 		next(w, r)
 	}
+}
+
+func (s *server) handleActiveBatchRun(w http.ResponseWriter, r *http.Request) {
+	if s.batchRunner == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"batchId": nil})
+		return
+	}
+	if id, ok := s.batchRunner.ActiveBatchID(); ok {
+		writeJSON(w, http.StatusOK, map[string]any{"batchId": id})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"batchId": nil})
+}
+
+func (s *server) handleBatchRuns(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(r.URL.Path, "/")
+	parts := strings.Split(path, "/")
+
+	// /api/batch-runs (collection)
+	if len(parts) == 1 {
+		switch r.Method {
+		case http.MethodGet:
+			s.handleListBatchRuns(w, r)
+		case http.MethodPost:
+			s.handleStartBatchRun(w, r)
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		}
+		return
+	}
+
+	// parts: ["batch-runs", id, ...]
+	if len(parts) < 2 {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "missing batch id"})
+		return
+	}
+	batchID := parts[1]
+	if batchID == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "missing batch id"})
+		return
+	}
+
+	// /api/batch-runs/{id}/stop
+	if len(parts) == 3 && parts[2] == "stop" {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+			return
+		}
+		s.handleStopBatchRun(w, r, batchID)
+		return
+	}
+
+	// /api/batch-runs/{id}
+	if len(parts) == 2 {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+			return
+		}
+		s.handleGetBatchRun(w, r, batchID)
+		return
+	}
+
+	writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+}
+
+func (s *server) handleListBatchRuns(w http.ResponseWriter, r *http.Request) {
+	batches, err := s.store.ListBatchRuns()
+	if err != nil {
+		slog.Error("failed to list batch runs", "error", err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to list batch runs"})
+		return
+	}
+	if batches == nil {
+		batches = []model.BatchRun{}
+	}
+	writeJSON(w, http.StatusOK, batches)
+}
+
+func (s *server) handleStartBatchRun(w http.ResponseWriter, r *http.Request) {
+	if s.batchRunner == nil {
+		writeJSON(w, http.StatusNotImplemented, errorResponse{Error: "batch runner not configured"})
+		return
+	}
+
+	var req batch.StartRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid request body"})
+		return
+	}
+
+	batchID, err := s.batchRunner.Start(req)
+	if err != nil {
+		slog.Error("failed to start batch run", "error", err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{"batchId": batchID})
+}
+
+func (s *server) handleGetBatchRun(w http.ResponseWriter, r *http.Request, batchID string) {
+	batch, err := s.store.GetBatchRun(batchID)
+	if err != nil {
+		slog.Error("failed to get batch run", "error", err, "batchId", batchID)
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "batch run not found"})
+		return
+	}
+
+	runs, err := s.store.ListRunsByBatch(batchID)
+	if err != nil {
+		slog.Error("failed to list runs for batch", "error", err, "batchId", batchID)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to list batch runs"})
+		return
+	}
+	if runs == nil {
+		runs = []model.Run{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"batch": batch,
+		"runs":  runs,
+	})
+}
+
+func (s *server) handleStopBatchRun(w http.ResponseWriter, r *http.Request, batchID string) {
+	if s.batchRunner == nil {
+		writeJSON(w, http.StatusNotImplemented, errorResponse{Error: "batch runner not configured"})
+		return
+	}
+
+	if err := s.batchRunner.Stop(batchID); err != nil {
+		slog.Error("failed to stop batch run", "error", err, "batchId", batchID)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/timmersuk/scaffold-bench-go/internal/model"
 )
@@ -16,20 +17,20 @@ func (s *Store) GetRun(id string) (model.Run, error) {
 	var finishedAt sql.NullInt64
 	var totalPoints, maxPoints sql.NullInt64
 	var scenarioIDs string
-	var endpoint, modelFile, quant, quantSource, harness, gpuBackend, gpuModel, hostThermal, reportPath, errMsg sql.NullString
+	var endpoint, modelFile, quant, quantSource, harness, gpuBackend, gpuModel, hostThermal, reportPath, errMsg, batchRunID sql.NullString
 	var quantTier sql.NullFloat64
 	var contextSize, gpuCount, vramTotal sql.NullInt64
 	err := s.db.QueryRow(`
 		SELECT id, started_at, finished_at, status, scenario_ids, runtime, runtime_kind,
 			endpoint, model, source, model_file, quant, quant_tier, quant_source, context_size,
 			harness, gpu_backend, gpu_model, gpu_count, vram_total_mb, host_thermal_note,
-			total_points, max_points, report_path, error
+			total_points, max_points, report_path, error, batch_run_id
 		FROM runs WHERE id = ?
 	`, id).Scan(
 		&r.ID, &r.StartedAt, &finishedAt, &r.Status, &scenarioIDs, &r.Runtime, &r.RuntimeKind,
 		&endpoint, &r.Model, &r.Source, &modelFile, &quant, &quantTier, &quantSource, &contextSize,
 		&harness, &gpuBackend, &gpuModel, &gpuCount, &vramTotal, &hostThermal,
-		&totalPoints, &maxPoints, &reportPath, &errMsg,
+		&totalPoints, &maxPoints, &reportPath, &errMsg, &batchRunID,
 	)
 	if err != nil {
 		return model.Run{}, fmt.Errorf("get run: %w", err)
@@ -70,6 +71,9 @@ func (s *Store) GetRun(id string) (model.Run, error) {
 	r.HostThermalNote = hostThermal.String
 	r.ReportPath = reportPath.String
 	r.Error = errMsg.String
+	if batchRunID.Valid {
+		r.BatchRunID = batchRunID.String
+	}
 	_ = json.Unmarshal([]byte(scenarioIDs), &r.ScenarioIDs)
 	return r, nil
 }
@@ -80,7 +84,7 @@ func (s *Store) ListRuns() ([]model.Run, error) {
 		SELECT id, started_at, finished_at, status, scenario_ids, runtime, runtime_kind,
 			endpoint, model, source, model_file, quant, quant_tier, quant_source, context_size,
 			harness, gpu_backend, gpu_model, gpu_count, vram_total_mb, host_thermal_note,
-			total_points, max_points, report_path, error
+			total_points, max_points, report_path, error, batch_run_id
 		FROM runs
 		ORDER BY started_at DESC
 	`)
@@ -95,14 +99,14 @@ func (s *Store) ListRuns() ([]model.Run, error) {
 		var finishedAt sql.NullInt64
 		var totalPoints, maxPoints sql.NullInt64
 		var scenarioIDs string
-		var endpoint, modelFile, quant, quantSource, harness, gpuBackend, gpuModel, hostThermal, reportPath, errMsg sql.NullString
+		var endpoint, modelFile, quant, quantSource, harness, gpuBackend, gpuModel, hostThermal, reportPath, errMsg, batchRunID sql.NullString
 		var quantTier sql.NullFloat64
 		var contextSize, gpuCount, vramTotal sql.NullInt64
 		if err := rows.Scan(
 			&r.ID, &r.StartedAt, &finishedAt, &r.Status, &scenarioIDs, &r.Runtime, &r.RuntimeKind,
 			&endpoint, &r.Model, &r.Source, &modelFile, &quant, &quantTier, &quantSource, &contextSize,
 			&harness, &gpuBackend, &gpuModel, &gpuCount, &vramTotal, &hostThermal,
-			&totalPoints, &maxPoints, &reportPath, &errMsg,
+			&totalPoints, &maxPoints, &reportPath, &errMsg, &batchRunID,
 		); err != nil {
 			return nil, fmt.Errorf("scan run: %w", err)
 		}
@@ -142,6 +146,9 @@ func (s *Store) ListRuns() ([]model.Run, error) {
 		r.HostThermalNote = hostThermal.String
 		r.ReportPath = reportPath.String
 		r.Error = errMsg.String
+		if batchRunID.Valid {
+			r.BatchRunID = batchRunID.String
+		}
 		_ = json.Unmarshal([]byte(scenarioIDs), &r.ScenarioIDs)
 		runs = append(runs, r)
 	}
@@ -275,15 +282,15 @@ func (s *Store) InsertRun(r model.Run) error {
 			id, started_at, finished_at, status, scenario_ids, runtime, runtime_kind,
 			endpoint, model, source, model_file, quant, quant_tier, quant_source, context_size,
 			harness, gpu_backend, gpu_model, gpu_count, vram_total_mb, host_thermal_note,
-			total_points, max_points, report_path, error
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			total_points, max_points, report_path, error, batch_run_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		r.ID, r.StartedAt, nullInt64(r.FinishedAt), string(r.Status), jsonString(r.ScenarioIDs),
 		r.Runtime, r.RuntimeKind, nullString(r.Endpoint), r.Model, r.Source, nullString(r.ModelFile),
 		nullString(r.Quant), nullFloat64(r.QuantTier), nullString(r.QuantSource), nullInt(r.ContextSize),
 		nullString(r.Harness), nullString(r.GPUBackend), nullString(r.GPUModel), nullInt(r.GPUCount),
 		nullInt(r.VRAMTotalMB), nullString(r.HostThermalNote), nullInt(r.TotalPoints),
-		nullInt(r.MaxPoints), nullString(r.ReportPath), nullString(r.Error),
+		nullInt(r.MaxPoints), nullString(r.ReportPath), nullString(r.Error), nullString(r.BatchRunID),
 	)
 	if err != nil {
 		return fmt.Errorf("insert run: %w", err)
@@ -334,6 +341,33 @@ func (s *Store) UpdateRunMetadata(r model.Run) error {
 	)
 	if err != nil {
 		return fmt.Errorf("update run metadata: %w", err)
+	}
+	return nil
+}
+
+// UpdateRunBatchID updates the batch_run_id field of a run.
+func (s *Store) UpdateRunBatchID(runID, batchID string) error {
+	_, err := s.db.Exec(`
+		UPDATE runs SET batch_run_id = ?
+		WHERE id = ?
+	`, nullString(batchID), runID)
+	if err != nil {
+		return fmt.Errorf("update run batch id: %w", err)
+	}
+	return nil
+}
+
+// MarkRunningRunsStopped marks all runs with status "running" as "stopped".
+// This should be called on server startup to clean up stale state from previous crashes.
+func (s *Store) MarkRunningRunsStopped() error {
+	now := time.Now().UnixMilli()
+	_, err := s.db.Exec(`
+		UPDATE runs
+		SET status = ?, finished_at = ?
+		WHERE status = ?
+	`, string(model.RunRunning), now, string(model.RunStopped))
+	if err != nil {
+		return fmt.Errorf("mark running runs stopped: %w", err)
 	}
 	return nil
 }

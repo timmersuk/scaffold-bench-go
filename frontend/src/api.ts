@@ -1,5 +1,7 @@
 import type {
   BackendEvent,
+  BatchRun,
+  BatchRunDetail,
   ModelsResponse,
   OneshotLatestRun,
   OneshotTestSummary,
@@ -74,4 +76,15 @@ export const api = {
     `${BASE}/oneshot/artifacts/${promptId}${version ? `?v=${version}` : ""}`,
   getConfig: (signal?: AbortSignal) => get<RuntimeConfig>("/config", signal),
   updateConfig: (body: RuntimeConfig) => put<RuntimeConfig>("/config", body),
+  listBatchRuns: (signal?: AbortSignal) => get<BatchRun[]>("/batch-runs", signal),
+  getBatchRun: (id: string, signal?: AbortSignal) => get<BatchRunDetail>(`/batch-runs/${id}`, signal),
+  activeBatchRun: (signal?: AbortSignal) => get<{ batchId: string | null }>("/batch-runs/active", signal),
+  createBatchRun: (body: {
+    modelIds: string[];
+    scenarioIds: string[];
+    runsPerModel: number;
+    warmupDuration: number;
+    harness: string;
+  }) => post<{ batchId: string }>("/batch-runs", body),
+  stopBatchRun: (id: string) => post<{ ok: boolean }>(`/batch-runs/${id}/stop`),
 };

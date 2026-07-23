@@ -78,16 +78,20 @@ func Run(ctx context.Context, cfg Config) Output {
 			return finishRun(state, startedAt, "TIMEOUT")
 		}
 
-		reply, err := caller.Call(ctx, cfg.Endpoint, cfg.Model, cfg.APIKey, state.conversation, requestTools, func(delta string) {
+		turnCtx, turnCancel := context.WithTimeout(ctx, time.Until(deadline))
+		reply, err := caller.Call(turnCtx, cfg.Endpoint, cfg.Model, cfg.APIKey, state.conversation, requestTools, func(delta string) {
 			if state.firstTokenMs == nil && strings.TrimSpace(delta) != "" {
 				elapsed := time.Since(startedAt).Milliseconds()
 				state.firstTokenMs = &elapsed
 			}
 			emit(cfg.OnEvent, model.RuntimeEvent{Type: model.EventAssistantDelta, Delta: delta})
+		}, func(delta string) {
+			emit(cfg.OnEvent, model.RuntimeEvent{Type: model.EventReasoningDelta, Delta: delta})
 		})
+		turnCancel()
 		if err != nil {
 			msg := err.Error()
-			if strings.Contains(msg, "context deadline exceeded") || strings.Contains(msg, "TIMEOUT") {
+			if strings.Contains(msg, "context deadline exceeded") || strings.Contains(msg, "TIMEOUT") || strings.Contains(msg, "idle timeout") {
 				return finishRun(state, startedAt, "TIMEOUT")
 			}
 			return finishRun(state, startedAt, fmt.Sprintf("CRASH: %s", msg))

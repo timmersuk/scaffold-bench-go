@@ -16,20 +16,24 @@ import {
   getCallCounts,
   isRunComplete,
 } from "./dashboard-selectors";
+import { ExternalLink } from "lucide-react";
 
 const POLL_MS = 5000;
 
 interface DashboardProps {
   onStartRun: () => void;
-  onHistory: () => void;
   startingRunId?: string | null;
+  runId?: string | null;
+  onOpenBatch?: (batchId: string) => void;
 }
 
-export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardProps) {
+export function Dashboard({ onStartRun, startingRunId, runId, onOpenBatch }: DashboardProps) {
   const [state, dispatch] = useReducer(reducer, INITIAL_REDUCER_STATE);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<"idle" | "connecting" | "open" | "error">("idle");
   const [healthStatus, setHealthStatus] = useState<"ok" | "error">("ok");
+  const [batchRunId, setBatchRunId] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
   const lastSeqRef = useRef<number>(-1);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const { pushToast } = useToast();
@@ -42,8 +46,10 @@ export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardPro
   }, []);
 
 
-  // Health / active-run polling.
+  // Health / active-run polling (only when not viewing a specific historical run).
   useEffect(() => {
+    if (runId) return; // Skip polling when viewing a specific run
+
     let cancelled = false;
     let lastKnownRunId: string | null = null;
 
@@ -75,7 +81,50 @@ export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardPro
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [pushToast]);
+  }, [pushToast, runId]);
+
+  // Load specific historical run when runId is provided
+  useEffect(() => {
+    if (!runId) return;
+
+    let cancelled = false;
+    const loadRun = async () => {
+      try {
+        const [detail, events] = await Promise.all([
+          api.getRun(runId),
+          api.getRunEvents(runId, -1),
+        ]);
+        if (cancelled) return;
+
+        dispatch({ type: "_reset" });
+        lastSeqRef.current = -1;
+
+        for (const raw of events) {
+          const event = normalizeBackendEvent(raw as BackendEvent);
+          if (event) dispatchEvent(event);
+        }
+
+        setActiveRunId(runId);
+        setBatchRunId(detail.batchRunId ?? null);
+        setConnectionState("open");
+      } catch (err) {
+        if (cancelled) return;
+        pushToast(err instanceof Error ? err.message : "Failed to load run", "error");
+      }
+    };
+
+    loadRun();
+    return () => {
+      cancelled = true;
+    };
+  }, [runId, dispatchEvent, pushToast]);
+
+  // Tick every second while the run is active so the elapsed timer updates in real-time.
+  useEffect(() => {
+    if (state.status !== "running" && state.status !== "warming_up") return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [state.status]);
 
   // Event stream management: catch up via /events, then open SSE; reconnect on drops.
   useEffect(() => {
@@ -136,6 +185,25 @@ export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardPro
       };
     };
 
+    const handleVisibilityChange = () => {
+      if (document.hidden || !activeRunId || cancelled) return;
+      
+      // Tab became visible - check if we need to reconnect
+      if (!es || es.readyState === EventSource.CLOSED) {
+        clearReconnect();
+        open();
+      } else if (es.readyState === EventSource.CONNECTING) {
+        // Already reconnecting, do nothing
+      } else {
+        // Connection appears open, but catch up on any missed events
+        applyEvents(activeRunId, lastSeqRef.current).catch(() => {
+          // Ignore errors during visibility catch-up
+        });
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     if (activeRunId) {
       dispatch({ type: "_reset" });
       lastSeqRef.current = -1;
@@ -149,6 +217,7 @@ export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardPro
       cancelled = true;
       clearReconnect();
       es?.close();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [activeRunId, dispatchEvent, pushToast]);
 
@@ -179,7 +248,7 @@ export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardPro
 
   const elapsed =
     (state.status === "running" || state.status === "warming_up") && state.startedAt
-      ? Date.now() - state.startedAt
+      ? now - state.startedAt
       : 0;
 
   const focusedScenario = getFocusedScenario(state);
@@ -193,7 +262,7 @@ export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardPro
   const runComplete = isRunComplete(state.status);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-5rem)] min-h-0">
+    <div className="flex flex-col h-full min-h-0">
       <DashboardHeader
         totalPoints={displayed.total}
         maxPoints={displayed.max}
@@ -201,8 +270,20 @@ export function Dashboard({ onStartRun, onHistory, startingRunId }: DashboardPro
         status={state.status}
         onStart={handleStart}
         onStop={handleStop}
-        onHistory={onHistory}
       />
+
+      {batchRunId && onOpenBatch && (
+        <div className="flex items-center gap-2 px-4 py-2 mb-4 bg-blue-50 border border-blue-200 rounded-md text-sm">
+          <span className="text-blue-700">This run is part of batch</span>
+          <button
+            onClick={() => onOpenBatch(batchRunId)}
+            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium hover:underline"
+          >
+            <code className="text-xs bg-blue-100 px-1.5 py-0.5 rounded">{batchRunId.slice(0, 8)}</code>
+            <ExternalLink size={12} />
+          </button>
+        </div>
+      )}
 
       {isStarting ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-4">

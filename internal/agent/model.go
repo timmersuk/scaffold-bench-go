@@ -40,21 +40,25 @@ type ModelResponse struct {
 
 // Caller abstracts the OpenAI-compatible chat completions endpoint.
 type Caller interface {
-	Call(ctx context.Context, endpoint, model, apiKey string, messages []ChatMessage, tools []ToolDefinition, onDelta func(string)) (ModelResponse, error)
+	Call(ctx context.Context, endpoint, model, apiKey string, messages []ChatMessage, tools []ToolDefinition, onDelta func(string), onReasoningDelta func(string)) (ModelResponse, error)
 }
 
 // HTTPCaller makes streaming HTTP calls to an OpenAI-compatible endpoint.
 type HTTPCaller struct {
-	Client *http.Client
+	Client      *http.Client
+	IdleTimeout time.Duration
 }
 
 // NewHTTPCaller creates a caller with a default client.
 func NewHTTPCaller() *HTTPCaller {
-	return &HTTPCaller{Client: &http.Client{}}
+	return &HTTPCaller{
+		Client:      &http.Client{},
+		IdleTimeout: 5 * time.Minute,
+	}
 }
 
 // Call performs a streaming chat completion.
-func (c *HTTPCaller) Call(ctx context.Context, endpoint, modelID, apiKey string, messages []ChatMessage, tools []ToolDefinition, onDelta func(string)) (ModelResponse, error) {
+func (c *HTTPCaller) Call(ctx context.Context, endpoint, modelID, apiKey string, messages []ChatMessage, tools []ToolDefinition, onDelta func(string), onReasoningDelta func(string)) (ModelResponse, error) {
 	endpoint = normalizeEndpoint(endpoint)
 	body, err := json.Marshal(chatRequest{
 		Model:       modelID,
@@ -90,7 +94,7 @@ func (c *HTTPCaller) Call(ctx context.Context, endpoint, modelID, apiKey string,
 		return ModelResponse{}, fmt.Errorf("model returned %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
 	}
 
-	stream, usage, timings, err := readChatStream(ctx, resp.Body, onDelta)
+	stream, usage, timings, err := readChatStream(ctx, resp.Body, onDelta, onReasoningDelta, c.IdleTimeout)
 	if err != nil {
 		return ModelResponse{}, err
 	}
@@ -175,7 +179,7 @@ type streamState struct {
 	toolCallsByIndex map[int]OpenAIToolCall
 }
 
-func readChatStream(ctx context.Context, r io.Reader, onDelta func(string)) (streamState, *usage, *timings, error) {
+func readChatStream(ctx context.Context, r io.Reader, onDelta func(string), onReasoningDelta func(string), idleTimeout time.Duration) (streamState, *usage, *timings, error) {
 	state := streamState{
 		finishReason:     FinishStop,
 		toolCallsByIndex: make(map[int]OpenAIToolCall),
@@ -183,87 +187,116 @@ func readChatStream(ctx context.Context, r io.Reader, onDelta func(string)) (str
 	var lastUsage *usage
 	var lastTimings *timings
 
+	if idleTimeout <= 0 {
+		idleTimeout = 5 * time.Minute
+	}
+
 	scanner := bufio.NewScanner(r)
 	sawData := false
-	for scanner.Scan() {
+
+	type scanResult struct {
+		line string
+		done bool
+		err  error
+	}
+	lineCh := make(chan scanResult, 1)
+
+	go func() {
+		for scanner.Scan() {
+			lineCh <- scanResult{line: scanner.Text()}
+		}
+		if err := scanner.Err(); err != nil {
+			lineCh <- scanResult{err: err}
+		} else {
+			lineCh <- scanResult{done: true}
+		}
+	}()
+
+	for {
 		select {
 		case <-ctx.Done():
 			return state, lastUsage, lastTimings, ctx.Err()
-		default:
-		}
-
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if data == "" || data == "[DONE]" {
-			continue
-		}
-		sawData = true
-
-		var chunk chatStreamChunk
-		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-			continue
-		}
-		if chunk.Usage != nil {
-			lastUsage = chunk.Usage
-		}
-		if chunk.Timings != nil {
-			lastTimings = chunk.Timings
-		}
-		if len(chunk.Choices) == 0 {
-			continue
-		}
-
-		choice := chunk.Choices[0]
-		if choice.FinishReason != nil {
-			state.finishReason = narrowFinishReason(*choice.FinishReason)
-		}
-		if choice.Delta.Content != "" {
-			state.content += choice.Delta.Content
-			if onDelta != nil {
-				onDelta(choice.Delta.Content)
+		case <-time.After(idleTimeout):
+			return state, lastUsage, lastTimings, fmt.Errorf("idle timeout: no data received for %v", idleTimeout)
+		case result := <-lineCh:
+			if result.err != nil {
+				return state, lastUsage, lastTimings, fmt.Errorf("read stream: %w", result.err)
 			}
-		}
-		if choice.Delta.Reasoning != "" {
-			state.reasoning += choice.Delta.Reasoning
-		}
-		for _, tc := range choice.Delta.ToolCalls {
-			existing := state.toolCallsByIndex[tc.Index]
-			if tc.ID != "" {
-				existing.ID = tc.ID
+			if result.done {
+				if !sawData {
+					return state, lastUsage, lastTimings, fmt.Errorf("no SSE data received")
+				}
+				for i := 0; i < len(state.toolCallsByIndex); i++ {
+					if tc, ok := state.toolCallsByIndex[i]; ok {
+						if tc.ID == "" {
+							tc.ID = fmt.Sprintf("call_%d", i)
+						}
+						if tc.Function.Arguments == "" {
+							tc.Function.Arguments = "{}"
+						}
+						state.toolCallsByIndex[i] = tc
+					}
+				}
+				return state, lastUsage, lastTimings, nil
 			}
-			if tc.Function.Name != "" {
-				existing.Function.Name = tc.Function.Name
+
+			line := strings.TrimSpace(result.line)
+			if line == "" {
+				continue
 			}
-			existing.Function.Arguments += tc.Function.Arguments
-			existing.Type = "function"
-			state.toolCallsByIndex[tc.Index] = existing
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if data == "" || data == "[DONE]" {
+				continue
+			}
+			sawData = true
+
+			var chunk chatStreamChunk
+			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+				continue
+			}
+			if chunk.Usage != nil {
+				lastUsage = chunk.Usage
+			}
+			if chunk.Timings != nil {
+				lastTimings = chunk.Timings
+			}
+			if len(chunk.Choices) == 0 {
+				continue
+			}
+
+			choice := chunk.Choices[0]
+			if choice.FinishReason != nil {
+				state.finishReason = narrowFinishReason(*choice.FinishReason)
+			}
+			if choice.Delta.Content != "" {
+				state.content += choice.Delta.Content
+				if onDelta != nil {
+					onDelta(choice.Delta.Content)
+				}
+			}
+			if choice.Delta.Reasoning != "" {
+				state.reasoning += choice.Delta.Reasoning
+				if onReasoningDelta != nil {
+					onReasoningDelta(choice.Delta.Reasoning)
+				}
+			}
+			for _, tc := range choice.Delta.ToolCalls {
+				existing := state.toolCallsByIndex[tc.Index]
+				if tc.ID != "" {
+					existing.ID = tc.ID
+				}
+				if tc.Function.Name != "" {
+					existing.Function.Name = tc.Function.Name
+				}
+				existing.Function.Arguments += tc.Function.Arguments
+				existing.Type = "function"
+				state.toolCallsByIndex[tc.Index] = existing
+			}
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return state, lastUsage, lastTimings, fmt.Errorf("read stream: %w", err)
-	}
-	if !sawData {
-		return state, lastUsage, lastTimings, fmt.Errorf("no SSE data received")
-	}
-
-	for i := 0; i < len(state.toolCallsByIndex); i++ {
-		if tc, ok := state.toolCallsByIndex[i]; ok {
-			if tc.ID == "" {
-				tc.ID = fmt.Sprintf("call_%d", i)
-			}
-			if tc.Function.Arguments == "" {
-				tc.Function.Arguments = "{}"
-			}
-			state.toolCallsByIndex[i] = tc
-		}
-	}
-	return state, lastUsage, lastTimings, nil
 }
 
 func (s *streamState) toolCalls() []OpenAIToolCall {

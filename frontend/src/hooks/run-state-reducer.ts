@@ -54,6 +54,16 @@ function makeAssistantEntry(id: number, text: string, ts: number): LogEntry {
   };
 }
 
+function makeReasoningEntry(id: number, text: string, ts: number): LogEntry {
+  return {
+    id,
+    kind: "reasoning",
+    label: "reasoning",
+    text,
+    time: formatTime(ts),
+  };
+}
+
 export function reducer(state: ReducerState, action: Action): ReducerState {
   if (action.type === "_focus") {
     return { ...state, focusedScenarioId: action.id };
@@ -77,6 +87,7 @@ export function reducer(state: ReducerState, action: Action): ReducerState {
         editCallCount: 0,
         logs: [],
         streamBuffer: "",
+        reasoningBuffer: "",
       }));
       return {
         ...INITIAL_REDUCER_STATE,
@@ -117,6 +128,8 @@ export function reducer(state: ReducerState, action: Action): ReducerState {
         evaluation: undefined,
         logs: [],
         streamBuffer: "",
+        reasoningBuffer: "",
+        prompt: event.prompt,
       }));
       const userHasFocused =
         state.activeScenarioId !== null &&
@@ -138,6 +151,11 @@ export function reducer(state: ReducerState, action: Action): ReducerState {
           ? makeAssistantEntry(state._nextLogId, flushed, event.ts)
           : null;
         if (flushEntry) bump += 1;
+        const reasoningFlushed = s.reasoningBuffer.trim();
+        const reasoningEntry = reasoningFlushed
+          ? makeReasoningEntry(state._nextLogId + bump, reasoningFlushed, event.ts)
+          : null;
+        if (reasoningEntry) bump += 1;
         return {
           ...s,
           status: event.status as ScenarioStatus,
@@ -151,7 +169,8 @@ export function reducer(state: ReducerState, action: Action): ReducerState {
           finishedAt: event.ts,
           liveMetrics: event.modelMetrics ?? s.liveMetrics,
           streamBuffer: "",
-          logs: flushEntry ? [...s.logs, flushEntry] : s.logs,
+          reasoningBuffer: "",
+          logs: [...s.logs, ...(reasoningEntry ? [reasoningEntry] : []), ...(flushEntry ? [flushEntry] : [])],
         };
       });
       return {
@@ -164,15 +183,37 @@ export function reducer(state: ReducerState, action: Action): ReducerState {
     }
 
     case "assistant_delta": {
-      return {
-        ...state,
-        scenarios: updateScenario(state.scenarios, event.scenarioId, (s) => ({
+      let bump = 0;
+      const scenarios = updateScenario(state.scenarios, event.scenarioId, (s) => {
+        const reasoningFlushed = s.reasoningBuffer.trim();
+        const reasoningEntry = reasoningFlushed
+          ? makeReasoningEntry(state._nextLogId, reasoningFlushed, event.ts)
+          : null;
+        if (reasoningEntry) bump += 1;
+        return {
           ...s,
           streamBuffer: s.streamBuffer + event.content,
+          reasoningBuffer: "",
           firstTokenMs:
             s.firstTokenMs !== undefined || event.content.trim().length === 0 || !s.startedAt
               ? s.firstTokenMs
               : Math.max(0, event.ts - s.startedAt),
+          logs: reasoningEntry ? [...s.logs, reasoningEntry] : s.logs,
+        };
+      });
+      return {
+        ...state,
+        scenarios,
+        _nextLogId: state._nextLogId + bump,
+      };
+    }
+
+    case "reasoning_delta": {
+      return {
+        ...state,
+        scenarios: updateScenario(state.scenarios, event.scenarioId, (s) => ({
+          ...s,
+          reasoningBuffer: s.reasoningBuffer + event.content,
         })),
       };
     }
@@ -180,15 +221,21 @@ export function reducer(state: ReducerState, action: Action): ReducerState {
     case "assistant": {
       let bump = 0;
       const scenarios = updateScenario(state.scenarios, event.scenarioId, (s) => {
+        const reasoningFlushed = s.reasoningBuffer.trim();
+        const reasoningEntry = reasoningFlushed
+          ? makeReasoningEntry(state._nextLogId, reasoningFlushed, event.ts)
+          : null;
+        if (reasoningEntry) bump += 1;
         const finalText = (s.streamBuffer || event.content).trim();
         const entry = finalText
-          ? makeAssistantEntry(state._nextLogId, finalText, event.ts)
+          ? makeAssistantEntry(state._nextLogId + bump, finalText, event.ts)
           : null;
         if (entry) bump += 1;
         return {
           ...s,
           streamBuffer: "",
-          logs: entry ? [...s.logs, entry] : s.logs,
+          reasoningBuffer: "",
+          logs: [...s.logs, ...(reasoningEntry ? [reasoningEntry] : []), ...(entry ? [entry] : [])],
         };
       });
       return {
@@ -214,9 +261,14 @@ export function reducer(state: ReducerState, action: Action): ReducerState {
       }
       let bump = 0;
       const scenarios = updateScenario(state.scenarios, event.scenarioId, (s) => {
+        const reasoningFlushed = s.reasoningBuffer.trim();
+        const reasoningEntry = reasoningFlushed
+          ? makeReasoningEntry(state._nextLogId, reasoningFlushed, event.ts)
+          : null;
+        if (reasoningEntry) bump += 1;
         const flushed = s.streamBuffer.trim();
         const flushEntry = flushed
-          ? makeAssistantEntry(state._nextLogId, flushed, event.ts)
+          ? makeAssistantEntry(state._nextLogId + bump, flushed, event.ts)
           : null;
         if (flushEntry) bump += 1;
         const toolEntry: LogEntry = {
@@ -230,10 +282,11 @@ export function reducer(state: ReducerState, action: Action): ReducerState {
         return {
           ...s,
           streamBuffer: "",
+          reasoningBuffer: "",
           toolCallCount: (s.toolCallCount ?? 0) + 1,
           bashCallCount: label === "cmd" ? (s.bashCallCount ?? 0) + 1 : s.bashCallCount,
           editCallCount: label === "edit" ? (s.editCallCount ?? 0) + 1 : s.editCallCount,
-          logs: [...s.logs, ...(flushEntry ? [flushEntry] : []), toolEntry],
+          logs: [...s.logs, ...(reasoningEntry ? [reasoningEntry] : []), ...(flushEntry ? [flushEntry] : []), toolEntry],
         };
       });
       return {

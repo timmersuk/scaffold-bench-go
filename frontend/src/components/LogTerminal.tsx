@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ScenarioState, LogEntry as LogEntryType } from "../types";
 import { formatElapsed, formatNowHHMMSS } from "../lib/format";
 import { Panel } from "./Panel";
@@ -10,6 +10,7 @@ interface LogTerminalProps {
 
 const LABEL_STYLES: Record<string, { label: string; text: string }> = {
   assistant: { label: "text-indigo-600", text: "text-gray-700 whitespace-pre-wrap" },
+  reasoning: { label: "text-purple-400", text: "text-gray-500 whitespace-pre-wrap" },
   cmd: { label: "text-blue-600", text: "text-blue-700 font-semibold whitespace-pre-wrap" },
   edit: { label: "text-blue-600/70", text: "text-gray-700 whitespace-pre-wrap" },
   tool: { label: "text-blue-600", text: "text-gray-800 whitespace-pre-wrap" },
@@ -23,6 +24,9 @@ const LABEL_STYLES: Record<string, { label: string; text: string }> = {
 const FALLBACK = { label: "text-gray-500", text: "text-gray-800 whitespace-pre-wrap" };
 
 function LogLine({ entry }: { entry: LogEntryType }) {
+  if (entry.kind === "reasoning") {
+    return <ReasoningBlock text={entry.text} time={entry.time} />;
+  }
   const style = LABEL_STYLES[entry.label] ?? FALLBACK;
   return (
     <div className="flex gap-2 mb-1 break-words min-w-0">
@@ -31,6 +35,53 @@ function LogLine({ entry }: { entry: LogEntryType }) {
         {entry.label}
       </span>
       <span className={`flex-1 min-w-0 break-words ${style.text}`}>{entry.text}</span>
+    </div>
+  );
+}
+
+function ReasoningBlock({ text, time }: { text: string; time: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const preview = text.length > 80 ? text.slice(0, 80) + "..." : text;
+  return (
+    <div className="flex gap-2 mb-1 break-words min-w-0">
+      <span className="text-gray-400 w-[60px] flex-shrink-0 text-[11px]">[{time}]</span>
+      <span className="w-[72px] flex-shrink-0 text-right pr-2 text-[11px] text-purple-400">
+        reasoning
+      </span>
+      <div className="flex-1 min-w-0">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-left text-purple-400/70 hover:text-purple-300 text-[11px] cursor-pointer"
+        >
+          <span className="mr-1">{expanded ? "▼" : "▶"}</span>
+          {expanded ? "Reasoning" : `Reasoning…`}
+        </button>
+        {expanded && (
+          <div className="mt-1 text-gray-500 whitespace-pre-wrap text-[11px] bg-gray-800/50 rounded px-2 py-1">
+            {text}
+          </div>
+        )}
+        {!expanded && (
+          <span className="text-gray-600 text-[11px] ml-1">{preview}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LiveReasoning({ text }: { text: string }) {
+  return (
+    <div className="flex gap-2 mb-1 min-w-0">
+      <span className="text-gray-500 w-[60px] flex-shrink-0 text-[11px]">
+        [{formatNowHHMMSS()}]
+      </span>
+      <span className="w-[72px] flex-shrink-0 text-right pr-2 text-[11px] text-purple-400">
+        reasoning
+      </span>
+      <span className="flex-1 min-w-0 text-gray-500 whitespace-pre-wrap break-words italic">
+        {text}
+        <span className="inline-block w-[7px] h-[13px] bg-purple-400/50 animate-pulse translate-y-0.5 ml-0.5" />
+      </span>
     </div>
   );
 }
@@ -44,7 +95,7 @@ export function LogTerminal({ scenario, isLive }: LogTerminalProps) {
     if (!isUserScrolledUp.current && scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: "auto" });
     }
-  }, [scenario?.logs.length, scenario?.streamBuffer]);
+  }, [scenario?.logs.length, scenario?.streamBuffer, scenario?.reasoningBuffer]);
 
   const handleScroll = () => {
     const el = containerRef.current;
@@ -100,9 +151,25 @@ export function LogTerminal({ scenario, isLive }: LogTerminalProps) {
             onScroll={handleScroll}
             className="flex-1 overflow-y-auto px-4 py-3 text-xs font-mono"
           >
+            {scenario.prompt && (
+              <div className="flex gap-2 mb-2 pb-2 border-b border-gray-700 break-words min-w-0">
+                <span className="text-gray-400 w-[60px] flex-shrink-0 text-[11px]">[--:--:--]</span>
+                <span className="w-[72px] flex-shrink-0 text-right pr-2 text-[11px] text-amber-400">
+                  user
+                </span>
+                <span className="flex-1 min-w-0 break-words text-gray-200 whitespace-pre-wrap">
+                  {scenario.prompt}
+                </span>
+              </div>
+            )}
+
             {scenario.logs.map((entry) => (
               <LogLine key={entry.id} entry={entry} />
             ))}
+
+            {isLive && scenario.reasoningBuffer && (
+              <LiveReasoning text={scenario.reasoningBuffer} />
+            )}
 
             {isLive && scenario.streamBuffer && (
               <div className="flex gap-2 mb-1 min-w-0">
@@ -119,7 +186,7 @@ export function LogTerminal({ scenario, isLive }: LogTerminalProps) {
               </div>
             )}
 
-            {isLive && !scenario.streamBuffer && (
+            {isLive && !scenario.streamBuffer && !scenario.reasoningBuffer && (
               <div className="flex gap-2 mt-2">
                 <span className="text-gray-500 w-[60px] flex-shrink-0 text-[11px]">
                   [{formatNowHHMMSS()}]

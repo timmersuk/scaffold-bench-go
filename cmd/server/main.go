@@ -12,6 +12,7 @@ import (
 
 	"github.com/timmersuk/scaffold-bench-go/internal/agent"
 	"github.com/timmersuk/scaffold-bench-go/internal/api"
+	"github.com/timmersuk/scaffold-bench-go/internal/batch"
 	"github.com/timmersuk/scaffold-bench-go/internal/config"
 	"github.com/timmersuk/scaffold-bench-go/internal/oneshot"
 	"github.com/timmersuk/scaffold-bench-go/internal/realtime"
@@ -53,18 +54,28 @@ func run() error {
 		return err
 	}
 
+	// Clean up stale running state from previous crashes
+	if err := store.MarkRunningRunsStopped(); err != nil {
+		slog.Warn("failed to clean up stale runs", "err", err)
+	}
+	if err := store.MarkRunningBatchesInterrupted(); err != nil {
+		slog.Warn("failed to clean up stale batches", "err", err)
+	}
+
 	events := realtime.NewHub()
 	registry := runner.NewRegistry()
 	engine := runner.NewEngine(store, events, cfg, registry)
 
 	caller := agent.NewHTTPCaller()
 	oneshotEngine := oneshot.NewEngine(store, events, cfg, caller)
+	batchEngine := batch.NewEngine(store, engine)
 
 	router, err := api.NewRouter(api.Config{
 		Store:         store,
 		Events:        events,
 		Runner:        engine,
 		OneshotRunner: oneshotEngine,
+		BatchRunner:   batchEngine,
 		Registry:      registry,
 		AppConfig:     cfg,
 		BuildID:       BuildID,

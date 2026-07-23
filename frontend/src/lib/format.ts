@@ -20,3 +20,19 @@ export function formatWallTime(seconds: number): string {
 export function formatNowHHMMSS(): string {
   return new Date().toISOString().substring(11, 19);
 }
+
+export function formatTokenCount(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return `${Math.round(n)}`;
+}
+
+export function formatTps(value: number | null, approx: boolean, digits: number): string {
+  if (value === null) return "\u2014";
+  return `${approx ? "~" : ""}${value.toFixed(digits)}`;
+}
+
+export function formatSeconds(value: number | null, digits: number): string {
+  return value === null ? "\u2014" : `${value.toFixed(digits)}s`;
+}

@@ -18,8 +18,9 @@ A single-binary Go + Vite port of [scaffold-bench](https://github.com/1337hero/s
 | Scenarios ported | 🚧 In progress | SB-01 and SB-25 ported and validated against golden workspaces; remaining 48 scenarios not started |
 | Frontend wiring | 🚧 Partial | `/api/scenarios`, `/api/models`, and SSE run stream are wired; Dashboard view implemented in PR #29. RunHistory implemented and reuses Dashboard three-pane layout. OneShotLab fully implemented in PR #42. |
 | One-shot lab | ✅ Done | Full implementation: engine, API routes, frontend UI, 15 prompts, latest-per-prompt semantics (ADR-0007) |
-| Reports / leaderboard | ✅ Done | Full upstream parity: Solve %, Discipline %, Verify %, categories, tiers, context analysis, Pareto frontier, awards (PR #43) |
+| Reports / leaderboard | ✅ Done | Backend aggregation (PR #43); Report UI enhancement complete with sortable leaderboard, awards grid, category heatmap, token-score scatter, context growth chart, recent runs table |
 | Frontend tests | ✅ Done | Vitest + jsdom setup; 122 tests covering reducers, utilities, API client, and Dashboard smoke test |
+| Batch runs | ✅ Done | Web UI for unattended multi-model benchmarking with persisted batch history (ADR-0010) |
 
 ## Decisions captured
 
@@ -67,6 +68,37 @@ All closed design issues from the wayfinder map:
 - [x] Implement OneShotLab views and connect to `/api/oneshot/*`
 - [x] Implement Report leaderboard view with awards, totals, and model rankings (PR #43)
 - [x] Add Vitest + React Testing Library and component tests — 122 tests covering reducers, utilities, API client
+
+### Report UI Enhancement (upstream parity) — ✅ Done
+
+Refactored `Report.tsx` with sub-component architecture matching upstream. Tailwind styling, Victory charts.
+
+1. **Sortable Leaderboard** — ✅ Done
+2. **Awards Grid** — ✅ Done
+3. **Category Heatmap** — ✅ Done
+4. **Token-Score Scatter** — ✅ Done
+5. **Context Growth Chart** — ✅ Done
+6. **Recent Runs Table** — ✅ Done
+
+### Batch Runs (upstream parity) — ✅ Done
+
+Web UI for unattended multi-model benchmarking. Matches upstream `bench:all` CLI functionality with persisted batch history and full drill-down to individual run details (ADR-0010).
+
+**Schema changes:** ✅ Done
+
+- `batch_runs` table: id, config JSON, status, started_at, finished_at
+- `runs` table gets nullable `batch_run_id` foreign key
+
+**API endpoints:** ✅ Done
+
+- `POST /api/batch-runs` — start batch
+- `GET /api/batch-runs` — list all batches
+- `GET /api/batch-runs/:id` — batch details with per-model summary
+- `POST /api/batch-runs/:id/stop` — halt batch
+
+**Backend orchestrator:** ✅ Done
+
+**UI implementation:** ✅ Done
 
 ### Infrastructure
 

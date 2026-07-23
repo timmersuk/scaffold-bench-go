@@ -1,4 +1,4 @@
-import { useEffect, useState, useReducer } from "react";
+import { useEffect, useState, useReducer, useRef } from "react";
 import { ArrowLeft } from "lucide-react";
 import { api } from "../api";
 import { normalizeBackendEvent, type BackendEvent } from "../types";
@@ -30,9 +30,11 @@ type ViewState =
 export function RunDetailView({ runId, onBack }: RunDetailViewProps) {
   const [state, dispatch] = useReducer(reducer, INITIAL_REDUCER_STATE);
   const [viewState, setViewState] = useState<ViewState>({ kind: "loading" });
+  const lastSeqRef = useRef<number>(-1);
 
   useEffect(() => {
     let cancelled = false;
+    let es: EventSource | null = null;
     const controller = new AbortController();
 
     const load = async () => {
@@ -47,7 +49,10 @@ export function RunDetailView({ runId, onBack }: RunDetailViewProps) {
 
         for (const raw of events) {
           const event = normalizeBackendEvent(raw as BackendEvent);
-          if (event) dispatch(event);
+          if (event) {
+            dispatch(event);
+            lastSeqRef.current = Math.max(lastSeqRef.current, raw.seq ?? -1);
+          }
         }
 
         // If the run was persisted from a version that did not emit run_finished,
@@ -72,6 +77,11 @@ export function RunDetailView({ runId, onBack }: RunDetailViewProps) {
         }
 
         setViewState({ kind: "ready" });
+
+        // If the run is still running, open SSE for live updates
+        if (detail.status === "running" || detail.status === "warming_up") {
+          openSSE();
+        }
       } catch (err) {
         if (cancelled) return;
         setViewState({
@@ -81,10 +91,58 @@ export function RunDetailView({ runId, onBack }: RunDetailViewProps) {
       }
     };
 
+    const openSSE = () => {
+      if (cancelled) return;
+      es = new EventSource(`/api/runs/${runId}/stream`);
+      es.onmessage = (e) => {
+        try {
+          const raw = JSON.parse(e.data) as BackendEvent;
+          const event = normalizeBackendEvent(raw);
+          if (event) {
+            dispatch(event);
+            lastSeqRef.current = Math.max(lastSeqRef.current, raw.seq ?? -1);
+          }
+        } catch {
+          // ignore malformed messages
+        }
+      };
+      es.onerror = () => {
+        es?.close();
+        es = null;
+      };
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden || cancelled) return;
+      
+      // Tab became visible - check if we need to catch up on missed events
+      if (!es || es.readyState === EventSource.CLOSED) {
+        // SSE is closed, try to fetch missed events
+        api.getRunEvents(runId, lastSeqRef.current, controller.signal)
+          .then((events) => {
+            if (cancelled) return;
+            for (const raw of events) {
+              const event = normalizeBackendEvent(raw as BackendEvent);
+              if (event) {
+                dispatch(event);
+                lastSeqRef.current = Math.max(lastSeqRef.current, raw.seq ?? -1);
+              }
+            }
+          })
+          .catch(() => {
+            // ignore errors during visibility catch-up
+          });
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     load();
+
     return () => {
       cancelled = true;
       controller.abort();
+      es?.close();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [runId]);
 
@@ -143,7 +201,7 @@ export function RunDetailView({ runId, onBack }: RunDetailViewProps) {
           </div>
 
           <div className="md:col-span-6 min-h-0">
-            <LogTerminal scenario={focusedScenario} isLive={false} />
+            <LogTerminal scenario={focusedScenario} isLive={state.status === "running"} />
           </div>
 
           <div className="md:col-span-3 flex flex-col gap-4 min-h-0">

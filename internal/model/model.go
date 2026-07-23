@@ -42,6 +42,7 @@ const (
 	EventScenarioStarted    = "scenario_started"
 	EventAssistant          = "assistant"
 	EventAssistantDelta     = "assistant_delta"
+	EventReasoningDelta     = "reasoning_delta"
 	EventToolCall           = "tool_call"
 	EventToolResult         = "tool_result"
 	EventModelMetrics       = "model_metrics"
@@ -78,6 +79,7 @@ type Run struct {
 	MaxPoints       *int      `json:"maxPoints,omitempty"`
 	ReportPath      string    `json:"reportPath,omitempty"`
 	Error           string    `json:"error,omitempty"`
+	BatchRunID      string    `json:"batchRunId,omitempty"`
 }
 
 // ScenarioRun is the result of running a single scenario within a run.
@@ -263,4 +265,32 @@ type LabPrompt struct {
 	Title    string `json:"title"`
 	Category string `json:"category"`
 	Prompt   string `json:"-"`
+}
+
+// BatchRunStatus is the lifecycle status of a batch run.
+type BatchRunStatus string
+
+const (
+	BatchRunRunning     BatchRunStatus = "running"
+	BatchRunCompleted   BatchRunStatus = "completed"
+	BatchRunInterrupted BatchRunStatus = "interrupted"
+	BatchRunFailed      BatchRunStatus = "failed"
+)
+
+// BatchRunConfig holds the configuration for a batch run.
+type BatchRunConfig struct {
+	ModelIDs       []string `json:"modelIds"`
+	ScenarioIDs    []string `json:"scenarioIds"`
+	RunsPerModel   int      `json:"runsPerModel"`
+	WarmupDuration int      `json:"warmupDuration"`
+	Harness        string   `json:"harness"`
+}
+
+// BatchRun is a collection of runs executed as part of a batch.
+type BatchRun struct {
+	ID         string         `json:"id"`
+	Config     BatchRunConfig `json:"config"`
+	Status     BatchRunStatus `json:"status"`
+	StartedAt  int64          `json:"startedAt"`
+	FinishedAt *int64         `json:"finishedAt,omitempty"`
 }

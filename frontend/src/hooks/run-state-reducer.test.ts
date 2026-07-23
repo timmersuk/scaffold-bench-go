@@ -80,7 +80,7 @@ describe("run-state-reducer", () => {
   describe("scenario_started", () => {
     it("updates scenario metadata and status", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "pending", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "pending", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" }],
       });
       const event = makeEvent("scenario_started", {
         scenarioId: "SB-01",
@@ -98,7 +98,7 @@ describe("run-state-reducer", () => {
 
     it("auto-focuses on first scenario", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "pending", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "pending", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" }],
         activeScenarioId: null,
         focusedScenarioId: null,
       });
@@ -110,8 +110,8 @@ describe("run-state-reducer", () => {
     it("preserves user focus when user has manually focused elsewhere", () => {
       const state = makeState({
         scenarios: [
-          { id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" },
-          { id: "SB-02", name: "", category: "", maxPoints: 0, status: "pending", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" },
+          { id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" },
+          { id: "SB-02", name: "", category: "", maxPoints: 0, status: "pending", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" },
         ],
         activeScenarioId: "SB-01",
         focusedScenarioId: "SB-02",
@@ -125,7 +125,7 @@ describe("run-state-reducer", () => {
   describe("assistant_delta", () => {
     it("appends content to stream buffer", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "Hello" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "Hello", reasoningBuffer: "" }],
       });
       const event = makeEvent("assistant_delta", { scenarioId: "SB-01", content: " world" });
       const result = reducer(state, event);
@@ -134,7 +134,7 @@ describe("run-state-reducer", () => {
 
     it("calculates firstTokenMs on first non-empty delta", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", startedAt: 1000, toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", firstTokenMs: undefined }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", startedAt: 1000, toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "", firstTokenMs: undefined }],
       });
       const event = makeEvent("assistant_delta", { scenarioId: "SB-01", content: "Hello", ts: 1500 });
       const result = reducer(state, event);
@@ -143,7 +143,7 @@ describe("run-state-reducer", () => {
 
     it("does not update firstTokenMs if already set", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", startedAt: 1000, toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", firstTokenMs: 200 }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", startedAt: 1000, toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "", firstTokenMs: 200 }],
       });
       const event = makeEvent("assistant_delta", { scenarioId: "SB-01", content: "world", ts: 1500 });
       const result = reducer(state, event);
@@ -152,7 +152,7 @@ describe("run-state-reducer", () => {
 
     it("does not calculate firstTokenMs for empty content", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", startedAt: 1000, toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", firstTokenMs: undefined }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", startedAt: 1000, toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "", firstTokenMs: undefined }],
       });
       const event = makeEvent("assistant_delta", { scenarioId: "SB-01", content: "   ", ts: 1500 });
       const result = reducer(state, event);
@@ -163,7 +163,7 @@ describe("run-state-reducer", () => {
   describe("assistant", () => {
     it("flushes stream buffer to logs", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "Hello world" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "Hello world", reasoningBuffer: "" }],
         _nextLogId: 1,
       });
       const event = makeEvent("assistant", { scenarioId: "SB-01", content: "Hello world" });
@@ -176,7 +176,7 @@ describe("run-state-reducer", () => {
 
     it("increments log ID when adding entry", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "Test" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "Test", reasoningBuffer: "" }],
         _nextLogId: 10,
       });
       const event = makeEvent("assistant", { scenarioId: "SB-01", content: "Test" });
@@ -186,7 +186,7 @@ describe("run-state-reducer", () => {
 
     it("does not add log entry for empty content", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" }],
         _nextLogId: 1,
       });
       const event = makeEvent("assistant", { scenarioId: "SB-01", content: "" });
@@ -199,7 +199,7 @@ describe("run-state-reducer", () => {
   describe("tool_call", () => {
     it("creates tool log entry with command label", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" }],
         _nextLogId: 1,
       });
       const event = makeEvent("tool_call", {
@@ -214,7 +214,7 @@ describe("run-state-reducer", () => {
 
     it("increments tool and bash counters", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" }],
       });
       const event = makeEvent("tool_call", {
         scenarioId: "SB-01",
@@ -227,7 +227,7 @@ describe("run-state-reducer", () => {
 
     it("increments edit counter for edit tools", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" }],
       });
       const event = makeEvent("tool_call", {
         scenarioId: "SB-01",
@@ -240,7 +240,7 @@ describe("run-state-reducer", () => {
 
     it("flushes stream buffer before tool entry", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "Thinking..." }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "Thinking...", reasoningBuffer: "" }],
         _nextLogId: 1,
       });
       const event = makeEvent("tool_call", {
@@ -259,7 +259,7 @@ describe("run-state-reducer", () => {
   describe("tool_result", () => {
     it("creates stdout entry for normal result", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" }],
         _nextLogId: 1,
       });
       const event = makeEvent("tool_result", { scenarioId: "SB-01", result: "file1.txt\nfile2.txt" });
@@ -271,7 +271,7 @@ describe("run-state-reducer", () => {
 
     it("creates stderr entry for error result", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" }],
       });
       const event = makeEvent("tool_result", { scenarioId: "SB-01", result: "Error: file not found" });
       const result = reducer(state, event);
@@ -280,7 +280,7 @@ describe("run-state-reducer", () => {
 
     it("truncates long results to 500 chars", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" }],
       });
       const longResult = "x".repeat(1000);
       const event = makeEvent("tool_result", { scenarioId: "SB-01", result: longResult });
@@ -292,7 +292,7 @@ describe("run-state-reducer", () => {
   describe("scenario_finished", () => {
     it("updates scenario status and metrics", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 5, bashCallCount: 2, editCallCount: 1, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 5, bashCallCount: 2, editCallCount: 1, logs: [], streamBuffer: "", reasoningBuffer: "" }],
       });
       const event = makeEvent("scenario_finished", {
         scenarioId: "SB-01",
@@ -311,7 +311,7 @@ describe("run-state-reducer", () => {
 
     it("flushes remaining stream buffer", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "Final thoughts" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "Final thoughts", reasoningBuffer: "" }],
         _nextLogId: 1,
       });
       const event = makeEvent("scenario_finished", { scenarioId: "SB-01", status: "pass", points: 10, wallTimeMs: 1000, toolCallCount: 0 });
@@ -323,7 +323,7 @@ describe("run-state-reducer", () => {
 
     it("clears activeScenarioId when finishing active scenario", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" }],
         activeScenarioId: "SB-01",
       });
       const event = makeEvent("scenario_finished", { scenarioId: "SB-01", status: "pass", points: 10, wallTimeMs: 1000, toolCallCount: 0 });
@@ -335,7 +335,7 @@ describe("run-state-reducer", () => {
   describe("model_metrics", () => {
     it("updates global and scenario metrics", () => {
       const state = makeState({
-        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "" }],
+        scenarios: [{ id: "SB-01", name: "", category: "", maxPoints: 0, status: "running", toolCallCount: 0, bashCallCount: 0, editCallCount: 0, logs: [], streamBuffer: "", reasoningBuffer: "" }],
       });
       const event = makeEvent("model_metrics", {
         scenarioId: "SB-01",

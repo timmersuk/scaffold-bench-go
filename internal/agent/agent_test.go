@@ -11,7 +11,7 @@ type fakeCaller struct {
 	responses []ModelResponse
 }
 
-func (f *fakeCaller) Call(ctx context.Context, endpoint, model, apiKey string, messages []ChatMessage, tools []ToolDefinition, onDelta func(string)) (ModelResponse, error) {
+func (f *fakeCaller) Call(ctx context.Context, endpoint, model, apiKey string, messages []ChatMessage, tools []ToolDefinition, onDelta func(string), onReasoningDelta func(string)) (ModelResponse, error) {
 	if len(f.responses) == 0 {
 		return ModelResponse{FinishReason: FinishStop, Message: ChatMessage{Role: "assistant", Content: "done"}}, nil
 	}

@@ -21,7 +21,7 @@ beforeEach(() => {
 
 describe("Dashboard", () => {
   it("renders without crashing", () => {
-    render(<Dashboard onStartRun={vi.fn()} onHistory={vi.fn()} />);
+    render(<Dashboard onStartRun={vi.fn()} />);
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
   });
 });

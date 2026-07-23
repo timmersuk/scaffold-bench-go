@@ -21,7 +21,7 @@ function makeScenario(overrides: Partial<ScenarioState> = {}): ScenarioState {
     bashCallCount: 0,
     editCallCount: 0,
     logs: [],
-    streamBuffer: "",
+    streamBuffer: "", reasoningBuffer: "",
     ...overrides,
   };
 }
