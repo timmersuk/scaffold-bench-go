@@ -131,7 +131,7 @@ export function OneShotLab({ onBack }: Props) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-full min-h-0 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">ONE-SHOT LAB</h2>
@@ -160,20 +160,22 @@ export function OneShotLab({ onBack }: Props) {
         onStop={handleStop}
       />
 
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-4 space-y-4">
-          <div className="rounded-lg border bg-white p-4">
+      <div className="flex-1 min-h-0 grid grid-cols-12 gap-6">
+        <div className="col-span-4 flex flex-col min-h-0 space-y-4">
+          <div className="flex flex-col min-h-0 rounded-lg border bg-white p-4">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
               Test Queue
             </h3>
-            <OneshotQueue
-              prompts={prompts}
-              promptStates={state.prompts}
-              selectedPromptId={selectedPromptId}
-              onSelect={setSelectedPromptId}
-              onRunSingle={handleRunSingle}
-              isRunning={isRunning}
-            />
+            <div className="flex-1 min-h-0 overflow-auto">
+              <OneshotQueue
+                prompts={prompts}
+                promptStates={state.prompts}
+                selectedPromptId={selectedPromptId}
+                onSelect={setSelectedPromptId}
+                onRunSingle={handleRunSingle}
+                isRunning={isRunning}
+              />
+            </div>
           </div>
           <OneshotMetadata
             promptState={currentPromptState}
@@ -182,7 +184,7 @@ export function OneShotLab({ onBack }: Props) {
           />
         </div>
 
-        <div className="col-span-8">
+        <div className="col-span-8 min-h-0">
           <OneshotCanvas
             promptState={currentPromptState}
             promptId={selectedPromptId}

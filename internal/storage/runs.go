@@ -365,7 +365,7 @@ func (s *Store) MarkRunningRunsStopped() error {
 		UPDATE runs
 		SET status = ?, finished_at = ?
 		WHERE status = ?
-	`, string(model.RunRunning), now, string(model.RunStopped))
+	`, string(model.RunStopped), now, string(model.RunRunning))
 	if err != nil {
 		return fmt.Errorf("mark running runs stopped: %w", err)
 	}
